@@ -9,6 +9,7 @@ find_package(catkin REQUIRED COMPONENTS
   actionlib_msgs
   geometry_msgs
   move_base_msgs
+  nav_msgs
   roscpp
   rospy
   std_msgs
@@ -190,3 +191,6 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+
+add_executable(learning_astar_node src/learning_astar_node.cpp)
+target_link_libraries(learning_astar_node ${catkin_LIBRARIES})
