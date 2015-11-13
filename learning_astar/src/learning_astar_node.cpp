@@ -38,9 +38,14 @@ int main(int argc, char **argv){
   //get the goal clicked on rviz by user
   ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
 
+  //TODO check if the initial and goal positions are valid and ask the user to enter them again if they aren't
+
   //get a list of waypoints as the plan for turtlebot
   std::vector<geometry_msgs::Pose> wayPoints;
   wayPoints = astar.makePlan();
+
+  //TODO print out wayPoints to see if the star actually works
+
   ros::spin();
 
   return 0;

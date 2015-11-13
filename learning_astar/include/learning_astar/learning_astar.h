@@ -33,8 +33,10 @@ public:
     //all variable members
     float mapResolution_;
     int mapWidth_, mapHeight_;
+    int *dynamicWorldMap, *gMap;
+    bool *OGM;
     geometry_msgs::Pose mapOrigin_;
-    nav_msgs::OccupancyGrid worldMap_, dynamicWorldMap;
+    nav_msgs::OccupancyGrid worldMap_;
     geometry_msgs::PoseWithCovarianceStamped initialPosition_;
     geometry_msgs::PoseStamped goalPosition_;
 
@@ -45,7 +47,12 @@ public:
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr&); //callBack for move_base_simpl/goal
     void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr&); //callback for initialpose
     std::vector<geometry_msgs::Pose> makePlan();
-
+    bool isFree(std::pair<unsigned int, unsigned int>);
+    int toIndex(std::pair<unsigned int, unsigned int>);
+    int h(std::pair<unsigned int, unsigned int>);
+    int cost(std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>);
+    bool isGoal(std::pair<unsigned int, unsigned int>);
+    geometry_msgs::Pose getPose(std::pair<unsigned int, unsigned int>);
 };
 
 
