@@ -2,7 +2,8 @@
 <package format="2">
   <name>learning_astar</name>
   <version>0.0.0</version>
-  <description>The learning_astar package</description>
+  <description>This package provides LRTA* node, which learns dynamics of the environment while exploring
+    it. Includes a decaying map which keeps track of soft obstacles.</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag --> 
   <!-- Example:  -->
