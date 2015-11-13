@@ -44,6 +44,7 @@ public:
     void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] tp mapCells [mx,my]
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr&); //callBack for move_base_simpl/goal
     void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr&); //callback for initialpose
+    std::vector<geometry_msgs::Pose> makePlan();
 
 };
 

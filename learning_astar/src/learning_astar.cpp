@@ -6,6 +6,14 @@
 //custom include
 #include "../include/learning_astar/learning_astar.h"
 
+//ros includes
+
+
+//c++ includes
+#include <map>
+#include <utility>
+#include <queue>
+
 
 //Constructor just because
 learning_astar::learning_astar(){
@@ -50,4 +58,43 @@ void learning_astar::worldToMap(float wx, float wy, unsigned int *mx, unsigned i
   *my = (unsigned int) ((wy-mapOrigin_.position.y)/mapResolution_);
 
   return;
+}
+
+//for making a plan using A*
+std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
+  //get inital mapCells
+  unsigned int mx, my;
+  worldToMap(mapOrigin_.position.x, mapOrigin_.position.y, &mx, &my);
+
+  //get goal mapCells
+  unsigned int gx, gy;
+  worldToMap(mapOrigin_.position.x, mapOrigin_.position.y, &gx, &gy);
+
+  //get array of occupancy values from world map
+  bool* OGM = new bool [mapHeight_*mapWidth_];
+  for (unsigned int iy = 0; iy < mapHeight_; iy++)
+  {
+    for (unsigned int ix = 0; ix < mapWidth_; ix++)
+    {
+      unsigned int cost = static_cast<unsigned int>(worldMap_.data[iy*mapWidth_+ix]);
+      //cout<<cost;
+      if (cost == 0)
+        OGM[iy*mapWidth_+ix]=true;
+      else
+        OGM[iy*mapWidth_+ix]=false;
+    }
+  }
+
+  //resultant vector with waypoints
+  std::vector<geometry_msgs::Pose> wayPoints;
+  wayPoints.clear();
+
+  //set up variables: a heap for storing open list sorted on f(), a closed map for looking up if a neighboring cell
+  // has already been visited
+  std::map< std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int> > closedSet;
+  std::priority_queue< std::pair< std::pair<unsigned int, unsigned int>, unsigned int > > openSet;
+
+
+  return wayPoints;
+
 }
