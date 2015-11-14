@@ -119,7 +119,7 @@ bool learning_astar::isGoal(std::pair<unsigned int, unsigned int>) {
 
 }
 
-//TODO for converting mapCells to Pose format to be used by main node
+//TODO for converting mapCells to world co-ordinates, and transforming into Pose msg which will be used by main node
 geometry_msgs::Pose learning_astar::getPose(std::pair<unsigned int, unsigned int>) { }
 
 //for making a plan using A*
