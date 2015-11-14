@@ -14,7 +14,9 @@
 #include <utility>
 #include <queue>
 #include <limits.h>
-#include<algorithm>
+#include <algorithm>
+
+typedef std::pair<unsigned int, unsigned int> mapCell;
 
 //TODO fill in the class for minHeap
 class myComparator;
@@ -94,38 +96,35 @@ void learning_astar::worldToMap(float wx, float wy, unsigned int *mx, unsigned i
   return;
 }
 
-//TODO for converting from mapCell to index
-int learning_astar::toIndex(std::pair<unsigned int, unsigned int>) {
-
+//for converting from mapCell to index
+int learning_astar::toIndex(mapCell cell) {
+  int index = cell.second*mapWidth_+cell.first;
+  return index;
 }
 
-//TODO heuristic function
-int learning_astar::h(std::pair<unsigned int, unsigned int>) {
+//heuristic function
+float learning_astar::h(mapCell current, mapCell goal) {
+  float hScore = std::max(std::abs(current.first-goal.first), std::abs(current.second-goal.second)) + 0.4*std::min
+  (std::abs(current.first-goal.first), std::abs(current.second-goal.second));
 
+  return hScore;
 }
 
 //TODO for calculating cost of travelling from one mapCell to other
-int learning_astar::cost(std::pair<unsigned int, unsigned int>, std::pair<unsigned int, unsigned int>) {
+int learning_astar::cost(mapCell, mapCell) {
 
 }
 
-//TODO for checking if a mapCell is free to move to
-bool learning_astar::isFree(std::pair<unsigned int, unsigned int>) {
-
+//for checking if a mapCell is free to move to
+bool learning_astar::isFree(mapCell cell) {
+  return OGM[toIndex(cell)]
 }
 
-//TODO for checking if mapCell is the goal
-bool learning_astar::isGoal(std::pair<unsigned int, unsigned int>) {
-
-}
-
-//TODO for converting mapCells to world co-ordinates, and transforming into Pose msg which will be used by main node
-geometry_msgs::Pose learning_astar::getPose(std::pair<unsigned int, unsigned int>) { }
+//TODO for converting mapCells to Pose format to be used by main node
+geometry_msgs::Pose learning_astar::getPose(mapCell) { }
 
 //for making a plan using A*
 std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
-
-  typedef std::pair<unsigned int, unsigned int> mapCell;
 
   //for neighbors
   int dx[3] = {-1, 0,1 };
@@ -140,7 +139,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   worldToMap(mapOrigin_.position.x, mapOrigin_.position.y, &gx, &gy);
 
   //store initial and goal position
-  mapCell initialPose = std::make_pair(mx,my), goalPose(gx,gy);
+  mapCell initialPose = std::make_pair(mx,my), goalPose = std::make_pair(gx,gy);
 
   //resultant vector with waypoints
   std::vector<geometry_msgs::Pose> wayPoints;
@@ -162,7 +161,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   //set up variables: a heap for storing open list sorted on increasing f(), a closed map for looking up if a
   // neighboring cell has already been visited
   std::map< mapCell, mapCell > closedSet, parent;
-  std::priority_queue< std::pair< mapCell, int >, std::vector< std::pair< mapCell, int > >, myComparator >
+  std::priority_queue< std::pair< mapCell, float >, std::vector< std::pair< mapCell, float > >, myComparator >
       openSet;
   mapCell current;
   
@@ -192,7 +191,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
               gMap[neighbor_cell] = newg;
 
               //calculate f
-              int f_cell = gMap[neighbor_cell] + dynamicWorldMap[neighbor_cell] + h(neighbor);
+              float f_cell = gMap[neighbor_cell] + dynamicWorldMap[neighbor_cell] + h(neighbor, goalPose);
 
               //push onto the heap
               openSet.push(std::make_pair(neighbor, f_cell));
@@ -201,7 +200,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
               parent[neighbor] = current;
 
               //check if neighbor is the goal, if yes: update the flag
-              if (isGoal(neighbor)) {
+              if (neighbor.first==goalPose.first && neighbor.second==goalPose.second) {
                 current = neighbor;
                 goalFound = true;
               }
