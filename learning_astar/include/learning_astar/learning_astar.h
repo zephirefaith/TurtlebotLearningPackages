@@ -40,15 +40,16 @@ public:
     //all function members
     learning_astar();
     learning_astar(const nav_msgs::OccupancyGrid);
-    void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] tp mapCells [mx,my]
-    void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr&); //callBack for move_base_simpl/goal
-    void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr&); //callback for initialpose
-    std::vector<geometry_msgs::Pose> makePlan();
     bool isFree(mapCell);
     int toIndex(mapCell);
     float h(mapCell, mapCell);
     int cost(mapCell, mapCell);
     geometry_msgs::Pose getPose(mapCell);
+    std::vector<geometry_msgs::Pose> makePlan();
+    void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] to mapCells [mx,my]
+    void mapToWorld(float mx, float my, unsigned int *wx, unsigned int *wy); //converts mapCells [mx,my] to [wx,wy]
+    void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr&); //callBack for move_base_simple_goal
+    void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr&); //callback for initialpose
 };
 
 

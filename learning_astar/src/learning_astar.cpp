@@ -110,14 +110,17 @@ float learning_astar::h(mapCell current, mapCell goal) {
   return hScore;
 }
 
+//for checking if a mapCell is free to move to
+bool learning_astar::isFree(mapCell cell) {
+  return OGM[toIndex(cell)];
+}
+
+//TODO change from map to world co-ordinates
+void learning_astar::mapToWorld(float mx, float my, unsigned int *wx, unsigned int *wy) { }
+
 //TODO for calculating cost of travelling from one mapCell to other
 int learning_astar::cost(mapCell, mapCell) {
 
-}
-
-//for checking if a mapCell is free to move to
-bool learning_astar::isFree(mapCell cell) {
-  return OGM[toIndex(cell)]
 }
 
 //TODO for converting mapCells to Pose format to be used by main node
