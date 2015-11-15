@@ -76,7 +76,9 @@ int main(int argc, char **argv){
   geometry_msgs::Pose temp;
   while(!wayPoints.empty()){
     if(count == skipCount){
-      sparseWaypoints.push_back(wayPoints.back());
+      geometry_msgs::Pose temp = wayPoints.back();
+      ROS_INFO("Waypoint is, x: %f y: %f", temp.position.x, temp.position.y);
+      sparseWaypoints.push_back(temp);
       wayPoints.pop_back();
       count = 0;
     }
@@ -96,7 +98,7 @@ int main(int argc, char **argv){
                                           // Move  turtlebot as per the plan //
                                           /////////////////////////////////////
 
-  //threshold for goal
+  /*//threshold for goal
   float threshold = 0.25;  //meters
 
   //setup action client for move_base
@@ -139,7 +141,7 @@ int main(int argc, char **argv){
 
       ros::spinOnce();
     }
-  }
+  }*/
 
   ros::spin();
 

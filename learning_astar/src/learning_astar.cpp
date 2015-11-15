@@ -15,11 +15,17 @@
 #include <queue>
 #include <limits.h>
 #include <algorithm>
+#include <math.h>
 
 typedef std::pair<unsigned int, unsigned int> mapCell;
 
-//TODO fill in the class for minHeap
-class myComparator;
+//fill in the class for minHeap
+class myComparator{
+public:
+    bool operator() (mapCell a, mapCell b){
+      return a.second < b.second;
+    }
+};
 
 //Constructor just because
 learning_astar::learning_astar(){
@@ -96,6 +102,14 @@ void learning_astar::worldToMap(float wx, float wy, unsigned int *mx, unsigned i
   return;
 }
 
+//change from map to world co-ordinates
+void learning_astar::mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy) {
+  *wx = (float) (mx*mapResolution_*1.0 + mapOrigin_.position.x);
+  *wy = (float) (my*mapResolution_*1.0 + mapOrigin_.position.y);
+
+  return;
+}
+
 //for converting from mapCell to index
 int learning_astar::toIndex(mapCell cell) {
   int index = cell.second*mapWidth_+cell.first;
@@ -115,16 +129,21 @@ bool learning_astar::isFree(mapCell cell) {
   return OGM[toIndex(cell)];
 }
 
-//TODO change from map to world co-ordinates
-void learning_astar::mapToWorld(float mx, float my, unsigned int *wx, unsigned int *wy) { }
-
-//TODO for calculating cost of travelling from one mapCell to other
-int learning_astar::cost(mapCell, mapCell) {
-
+//for calculating cost of travelling from one mapCell to other
+int learning_astar::cost(mapCell current, mapCell next) {
+  return sqrt(pow(current.first-next.first,2)+pow(current.second-next.second,2));
 }
 
-//TODO for converting mapCells to Pose format to be used by main node
-geometry_msgs::Pose learning_astar::getPose(mapCell) { }
+//for converting mapCells to Pose format
+geometry_msgs::Pose learning_astar::getPose(mapCell cell) {
+  geometry_msgs::Pose wayPoint;
+  float wx, wy;
+  mapToWorld(cell.first, cell.second, &wx, &wy);
+  wayPoint.position.x = wx;
+  wayPoint.position.y = wy;
+
+  return wayPoint;
+}
 
 //for making a plan using A*
 std::vector<geometry_msgs::Pose> learning_astar::makePlan() {

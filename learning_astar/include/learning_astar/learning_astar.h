@@ -47,7 +47,7 @@ public:
     geometry_msgs::Pose getPose(mapCell);
     std::vector<geometry_msgs::Pose> makePlan();
     void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] to mapCells [mx,my]
-    void mapToWorld(float mx, float my, unsigned int *wx, unsigned int *wy); //converts mapCells [mx,my] to [wx,wy]
+    void mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy); //converts mapCells [mx,my] to [wx,wy]
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr&); //callBack for move_base_simple_goal
     void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr&); //callback for initialpose
 };
