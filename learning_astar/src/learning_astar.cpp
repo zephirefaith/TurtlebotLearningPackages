@@ -19,10 +19,10 @@
 
 typedef std::pair<unsigned int, unsigned int> mapCell;
 
-//fill in the class for minHeap
+//class comparator for minHeap of mapCells
 class myComparator{
 public:
-    bool operator() (mapCell a, mapCell b){
+    bool operator() (std::pair<mapCell, float> a, std::pair<mapCell, float> b){
       return a.second < b.second;
     }
 };
@@ -51,7 +51,7 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   dynamicWorldMap = new int[mapHeight_*mapWidth_];
   for (int x = 0; x < mapWidth_; ++x) {
     for (int y = 0; y < mapHeight_; ++y) {
-      dynamicWorldMap[y*mapHeight_+x] = 0;
+      dynamicWorldMap[y*mapWidth_+x] = 0;
     }
   }
 
@@ -59,12 +59,12 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   gMap = new int[mapHeight_*mapWidth_];
   for (int x = 0; x < mapWidth_; ++x) {
     for (int y = 0; y < mapHeight_; ++y) {
-      gMap[y*mapHeight_+x] = 255;
+      gMap[y*mapWidth_+x] = 255;
     }
   }
 
   //get array of occupancy values from world map
-  bool* OGM = new bool [mapHeight_*mapWidth_];
+  OGM = new bool [mapHeight_*mapWidth_];
   for (unsigned int iy = 0; iy < mapHeight_; iy++)
   {
     for (unsigned int ix = 0; ix < mapWidth_; ix++)
@@ -75,6 +75,8 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
       OGM[iy*mapWidth_+ix]= !cost;
     }
   }
+
+//  ROS_INFO("MapHeight: %d, MapWidth: %d", mapHeight_, mapWidth_);
 }
 
 //for updating initial position of the robot
@@ -97,7 +99,7 @@ void learning_astar::updateGoalPosition(const geometry_msgs::PoseStampedConstPtr
 //for converting from world co-ordinates to map-cells
 void learning_astar::worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my) {
   *mx = (unsigned int) ((wx - mapOrigin_.position.x) / mapResolution_);
-  *my = (unsigned int) ((wy-mapOrigin_.position.y)/mapResolution_);
+  *my = (unsigned int) ((wy - mapOrigin_.position.y)/mapResolution_);
 
   return;
 }
@@ -154,11 +156,13 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
   //get initial location
   unsigned int mx, my;
-  worldToMap(mapOrigin_.position.x, mapOrigin_.position.y, &mx, &my);
+  worldToMap(initialPosition_.pose.pose.position.x, initialPosition_.pose.pose.position.y, &mx, &my);
+  ROS_INFO("Start on map: (%d, %d)", mx, my);
 
   //get goal location
   unsigned int gx, gy;
-  worldToMap(mapOrigin_.position.x, mapOrigin_.position.y, &gx, &gy);
+  worldToMap(goalPosition_.pose.position.x, goalPosition_.pose.position.y, &gx, &gy);
+  ROS_INFO("Goal on map: (%d, %d)", gx, gy);
 
   //store initial and goal position
   mapCell initialPose = std::make_pair(mx,my), goalPose = std::make_pair(gx,gy);
@@ -175,7 +179,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   int initialIndex = toIndex(initialPose);
   for (int x = 0; x < mapWidth_; ++x) {
     for (int y = 0; y < mapHeight_; ++y) {
-      gMap[y*mapHeight_+x] = 255;
+      gMap[y*mapWidth_+x] = 255;
     }
   }
   gMap[initialIndex] = 0;
@@ -183,16 +187,18 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   //set up variables: a heap for storing open list sorted on increasing f(), a closed map for looking up if a
   // neighboring cell has already been visited
   std::map< mapCell, mapCell > closedSet, parent;
-  std::priority_queue< std::pair< mapCell, float >, std::vector< std::pair< mapCell, float > >, myComparator >
-      openSet;
+  std::priority_queue< std::pair< mapCell, float >, std::vector< std::pair< mapCell, float > >, myComparator > openSet;
   mapCell current;
-  
-  current = std::make_pair(initialPosition_.pose.pose.position.x, initialPosition_.pose.pose.position.y);
+
+  ROS_INFO("Finding an A* plan...");
+  current = initialPose;
   openSet.push(std::make_pair(current,0));
   while(!openSet.empty() && !goalFound){
 
-    current = openSet.top();
+    current = openSet.top().first;
     openSet.pop();
+    closedSet[current] = current;
+    int current_cell = toIndex(current);
     //find neighbors of current, you can move in any of the 8 adjacent boxes as long as they are free
     for (int i = 0; i < 3 && !goalFound; ++i) {
       for (int j = 0; j < 3 && !goalFound; ++j) {
@@ -206,7 +212,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
           if (mapIt == closedSet.end()) {
 
             int neighbor_cell = toIndex(neighbor);
-            int newg = gMap[toIndex(current)] + cost(current, neighbor);
+            int newg = gMap[current_cell] + cost(current, neighbor);
             if (gMap[neighbor_cell] > newg) {
 
               //update
@@ -233,9 +239,9 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
       }
     }
-
-    closedSet[current] = current;
   }
+
+  ROS_INFO("Found a plan...creating waypoints");
 
   //if goal was found, backtrack to get the waypoints or just return an empty waypoints vector
   if(goalFound){

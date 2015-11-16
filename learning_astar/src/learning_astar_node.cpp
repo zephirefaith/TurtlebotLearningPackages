@@ -16,11 +16,11 @@
 #include <math.h>
 
 typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseClient;
-float currX = 0.0 , currY = 0.0;
+float currPosX = 0.0 , currPosY = 0.0;
 
 void updateCurrentPose(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg) {
-  currX = msg->pose.pose.position.x;
-  currY = msg->pose.pose.position.y;
+  currPosX = msg->pose.pose.position.x;
+  currPosY = msg->pose.pose.position.y;
 
   return;
 }
@@ -51,12 +51,21 @@ int main(int argc, char **argv){
 
   //learning astar object initialization
   learning_astar astar(response);
+  ROS_INFO("LRTA* object created successfully");
 
   //get initial position clicked on rviz by user
   ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updateInitialPosition, &astar);
+  ROS_INFO("Waiting for the initial pose from RViz");
+  while (astar.initialPosition_.header.frame_id.size()==0){
+    ros::spinOnce();
+  }
 
   //get the goal clicked on rviz by user
   ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
+  ROS_INFO("Waiting for the goal from RViz");
+  while (astar.goalPosition_.header.frame_id.size()==0){
+    ros::spinOnce();
+  }
 
   //TODO check if the initial and goal positions are valid and ask the user to enter them again if they aren't
 
@@ -70,7 +79,7 @@ int main(int argc, char **argv){
   wayPoints = astar.makePlan();
 
   //to pass every nth waypoint to move_base so that it has a substantial way to go to
-  int skipCount = 15, count = 0;
+  int skipCount = 20, count = 0;
 
   //get sparse waypoints from dense waypoints
   geometry_msgs::Pose temp;
@@ -98,35 +107,39 @@ int main(int argc, char **argv){
                                           // Move  turtlebot as per the plan //
                                           /////////////////////////////////////
 
-  /*//threshold for goal
-  float threshold = 0.25;  //meters
+  //threshold for goal
+  float threshold = 0.1;  //meters
 
   //setup action client for move_base
   //tell the action client that we want to spin a thread by default
   MoveBaseClient ac("move_base", true);
 
   //wait for the action server to come up
+  ROS_INFO("Waiting for the move_base action server to come up");
   while(!ac.waitForServer(ros::Duration(5.0))) {
-    ROS_INFO("Waiting for the move_base action server to come up");
+    ROS_INFO("...");
+    ros::spinOnce();
   }
 
-  //variable for sending waypoints
-  move_base_msgs::MoveBaseGoal goal;
+  ROS_INFO("Client connected");
 
   //send sparse waypoints to Turtlebot move_base
   while (!sparseWaypoints.empty()){
 
-    geometry_msgs::Pose current = sparseWaypoints.back();
+    geometry_msgs::Pose currentGoal = sparseWaypoints.back();
     sparseWaypoints.pop_back();
+
+    //variable for sending waypoints
+    move_base_msgs::MoveBaseGoal goal;
 
     //create the goal with 'map' frame_id
     goal.target_pose.header.frame_id = "map";
     goal.target_pose.header.stamp = ros::Time::now();
-    goal.target_pose.pose.position.x = current.position.x;
-    goal.target_pose.pose.position.y = current.position.y;
+    goal.target_pose.pose.position.x = currentGoal.position.x;
+    goal.target_pose.pose.position.y = currentGoal.position.y;
 
     //send the goal
-    ROS_INFO("Sending goal");
+    ROS_INFO("Sending next waypoint");
     ac.sendGoal(goal);
 
     //track the status of goal
@@ -134,14 +147,14 @@ int main(int argc, char **argv){
     while(!atGoal){
       //subscribe to amcl_pose and check if within threshold
       ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, updateCurrentPose);
-      float distance = sqrt(pow(currX-current.position.x, 2) + pow(currY-current.position.y, 2));
+      float distance = sqrt(pow(currPosX - currentGoal.position.x, 2) + pow(currPosY - currentGoal.position.y, 2));
       if(distance<=threshold){
         atGoal=true;
       }
 
       ros::spinOnce();
     }
-  }*/
+  }
 
   ros::spin();
 
