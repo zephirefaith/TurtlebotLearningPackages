@@ -31,7 +31,7 @@ public:
     bool *OGM;
     float mapResolution_;
     int mapWidth_, mapHeight_;
-    int *dynamicWorldMap, *gMap;
+    float *dynamicWorldMap, *gMap;
     geometry_msgs::Pose mapOrigin_;
     nav_msgs::OccupancyGrid worldMap_;
     geometry_msgs::PoseWithCovarianceStamped initialPosition_;

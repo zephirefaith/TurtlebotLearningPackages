@@ -49,18 +49,18 @@ int main(int argc, char **argv){
     response = mapRequest.response.map;
   }
 
-  //learning astar object initialization
+  //learning_astar object initialization
   learning_astar astar(response);
   ROS_INFO("LRTA* object created successfully");
 
-  //get initial position clicked on rviz by user
+  //get initial position on rviz
   ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updateInitialPosition, &astar);
   ROS_INFO("Waiting for the initial pose from RViz");
   while (astar.initialPosition_.header.frame_id.size()==0){
     ros::spinOnce();
   }
 
-  //get the goal clicked on rviz by user
+  //get the goal on rviz
   ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
   ROS_INFO("Waiting for the goal from RViz");
   while (astar.goalPosition_.header.frame_id.size()==0){
@@ -79,14 +79,14 @@ int main(int argc, char **argv){
   wayPoints = astar.makePlan();
 
   //to pass every nth waypoint to move_base so that it has a substantial way to go to
-  int skipCount = 20, count = 0;
+  int skipCount = 15, count = 0;
 
   //get sparse waypoints from dense waypoints
   geometry_msgs::Pose temp;
   while(!wayPoints.empty()){
     if(count == skipCount){
       geometry_msgs::Pose temp = wayPoints.back();
-      ROS_INFO("Waypoint is, x: %f y: %f", temp.position.x, temp.position.y);
+      ROS_INFO("%f, %f", temp.position.x, temp.position.y);
       sparseWaypoints.push_back(temp);
       wayPoints.pop_back();
       count = 0;
@@ -96,11 +96,6 @@ int main(int argc, char **argv){
       temp = wayPoints.back();
       wayPoints.pop_back();
     }
-  }
-
-  //if the last wayPoint was not added to sparseWaypoints, add it
-  if(count<skipCount){
-    sparseWaypoints.push_back(temp);
   }
 
                                           //////////////////////////////////////
@@ -137,9 +132,11 @@ int main(int argc, char **argv){
     goal.target_pose.header.stamp = ros::Time::now();
     goal.target_pose.pose.position.x = currentGoal.position.x;
     goal.target_pose.pose.position.y = currentGoal.position.y;
+    goal.target_pose.pose.orientation.z = astar.initialPosition_.pose.pose.orientation.z;
+    goal.target_pose.pose.orientation.w = astar.initialPosition_.pose.pose.orientation.w;
 
     //send the goal
-    ROS_INFO("Sending next waypoint");
+    ROS_INFO("Sending waypoint: %f, %f", goal.target_pose.pose.position.x, goal.target_pose.pose.position.y);
     ac.sendGoal(goal);
 
     //track the status of goal
@@ -149,6 +146,7 @@ int main(int argc, char **argv){
       ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, updateCurrentPose);
       float distance = sqrt(pow(currPosX - currentGoal.position.x, 2) + pow(currPosY - currentGoal.position.y, 2));
       if(distance<=threshold){
+        ROS_INFO("Distance: %f", distance);
         atGoal=true;
       }
 
