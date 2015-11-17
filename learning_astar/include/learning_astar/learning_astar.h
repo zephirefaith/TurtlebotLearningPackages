@@ -31,7 +31,7 @@ public:
     bool *OGM;
     float mapResolution_;
     int mapWidth_, mapHeight_;
-    float *dynamicWorldMap, *gMap;
+    float *dynamicWorldMap;
     geometry_msgs::Pose mapOrigin_;
     nav_msgs::OccupancyGrid worldMap_;
     geometry_msgs::PoseWithCovarianceStamped initialPosition_;
@@ -43,7 +43,7 @@ public:
     bool isFree(mapCell);
     int toIndex(mapCell);
     float h(mapCell, mapCell);
-    int cost(mapCell, mapCell);
+    float cost(mapCell, mapCell);
     geometry_msgs::Pose getPose(mapCell);
     std::vector<geometry_msgs::Pose> makePlan();
     void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] to mapCells [mx,my]

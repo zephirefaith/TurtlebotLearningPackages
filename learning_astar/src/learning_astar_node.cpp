@@ -13,14 +13,13 @@
 #include <actionlib/client/simple_action_client.h>
 
 //c++ includes
-#include <math.h>
 
 typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseClient;
 float currPosX = 0.0 , currPosY = 0.0;
 
 void updateCurrentPose(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg) {
-  currPosX = msg->pose.pose.position.x;
-  currPosY = msg->pose.pose.position.y;
+  currPosX = (float) msg->pose.pose.position.x;
+  currPosY = (float) msg->pose.pose.position.y;
 
   return;
 }
@@ -81,11 +80,18 @@ int main(int argc, char **argv){
   //to pass every nth waypoint to move_base so that it has a substantial way to go to
   int skipCount = 15, count = 0;
 
-  //get sparse waypoints from dense waypoints
+  //last sparseWaypoint should be the goal itself
   geometry_msgs::Pose temp;
+  temp.position.x = astar.goalPosition_.pose.position.x;
+  temp.position.y = astar.goalPosition_.pose.position.y;
+  temp.orientation.w = astar.goalPosition_.pose.orientation.w;
+  temp.orientation.z = astar.goalPosition_.pose.orientation.z;
+  sparseWaypoints.push_back(temp);
+
+  //get sparse waypoints from dense waypoints
   while(!wayPoints.empty()){
     if(count == skipCount){
-      geometry_msgs::Pose temp = wayPoints.back();
+      temp = wayPoints.back();
       ROS_INFO("%f, %f", temp.position.x, temp.position.y);
       sparseWaypoints.push_back(temp);
       wayPoints.pop_back();
@@ -93,7 +99,6 @@ int main(int argc, char **argv){
     }
     else{
       count++;
-      temp = wayPoints.back();
       wayPoints.pop_back();
     }
   }
@@ -144,7 +149,7 @@ int main(int argc, char **argv){
     while(!atGoal){
       //subscribe to amcl_pose and check if within threshold
       ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, updateCurrentPose);
-      float distance = sqrt(pow(currPosX - currentGoal.position.x, 2) + pow(currPosY - currentGoal.position.y, 2));
+      float distance = (float) sqrt(pow(currPosX - currentGoal.position.x, 2) + pow(currPosY - currentGoal.position.y, 2));
       if(distance<=threshold){
         ROS_INFO("Distance: %f", distance);
         atGoal=true;
