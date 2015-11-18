@@ -13,7 +13,6 @@
 #include <nav_msgs/OccupancyGrid.h>
 
 //messages
-#include <move_base_msgs/MoveBaseAction.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>

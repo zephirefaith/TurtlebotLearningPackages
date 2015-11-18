@@ -241,7 +241,6 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
     //push back parents until map has no more
     std::map< mapCell, mapCell>::iterator mapIt = parent.find(current);
     while(mapIt!=parent.end()) {
-      ROS_INFO("Map Cell: %d, %d", current.first, current.second);
       wayPoints.push_back(getPose(current));
       current = parent[current];
       mapIt = parent.find(current);

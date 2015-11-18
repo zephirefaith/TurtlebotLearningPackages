@@ -12,14 +12,17 @@
 //for moving the turtlebot
 #include <actionlib/client/simple_action_client.h>
 
+//messages
+#include <move_base_msgs/MoveBaseAction.h>
+
 //c++ includes
 
 typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseClient;
 float currPosX = 0.0 , currPosY = 0.0;
 
-void updateCurrentPose(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg) {
-  currPosX = (float) msg->pose.pose.position.x;
-  currPosY = (float) msg->pose.pose.position.y;
+void updateCurrentPose(const move_base_msgs::MoveBaseFeedbackConstPtr &msg) {
+  currPosX = (float) msg->base_position.pose.position.x;
+  currPosY = (float) msg->base_position.pose.position.y;
 
   return;
 }
@@ -78,7 +81,7 @@ int main(int argc, char **argv){
   wayPoints = astar.makePlan();
 
   //to pass every nth waypoint to move_base so that it has a substantial way to go to
-  int skipCount = 15, count = 0;
+  int skipCount = 10, count = 0;
 
   //last sparseWaypoint should be the goal itself
   geometry_msgs::Pose temp;
@@ -108,7 +111,7 @@ int main(int argc, char **argv){
                                           /////////////////////////////////////
 
   //threshold for goal
-  float threshold = 0.1;  //meters
+  float threshold = 0.3;  //meters
 
   //setup action client for move_base
   //tell the action client that we want to spin a thread by default
@@ -142,16 +145,14 @@ int main(int argc, char **argv){
 
     //send the goal
     ROS_INFO("Sending waypoint: %f, %f", goal.target_pose.pose.position.x, goal.target_pose.pose.position.y);
-    ac.sendGoal(goal);
+    ac.sendGoal(goal, MoveBaseClient::SimpleDoneCallback(), MoveBaseClient::SimpleActiveCallback(),
+                &updateCurrentPose);
 
     //track the status of goal
     bool atGoal = false;
     while(!atGoal){
-      //subscribe to amcl_pose and check if within threshold
-      ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, updateCurrentPose);
-      float distance = (float) sqrt(pow(currPosX - currentGoal.position.x, 2) + pow(currPosY - currentGoal.position.y, 2));
+      float distance = (float) sqrt((currPosX - currentGoal.position.x)*(currPosX - currentGoal.position.x) + (currPosY - currentGoal.position.y)*(currPosY - currentGoal.position.y));
       if(distance<=threshold){
-        ROS_INFO("Distance: %f", distance);
         atGoal=true;
       }
 
