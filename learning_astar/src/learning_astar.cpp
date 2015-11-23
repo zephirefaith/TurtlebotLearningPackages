@@ -7,7 +7,7 @@
 #include "../include/learning_astar/learning_astar.h"
 
 //ros includes
-
+#include <tf/LinearMath/Quaternion.h>
 
 //c++ includes
 #include <queue>
@@ -23,10 +23,14 @@ learning_astar::learning_astar(){
   worldMap_ = nav_msgs::OccupancyGrid();
   dynamicWorldMap = new float;
   OGM = new bool;
+  botRadius = 0.0;
 }
 
 //default Constructor
 learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
+  botRadius = 0.2;
+  incrementConstant = 10;
+  decayConstant = 0.7;
   worldMap_ = mapgrid;
   mapResolution_ = worldMap_.info.resolution;
   mapOrigin_ = worldMap_.info.origin;
@@ -125,6 +129,13 @@ geometry_msgs::Pose learning_astar::getPose(mapCell cell) {
   wayPoint.position.y = wy;
 
   return wayPoint;
+}
+
+//a 2d gaussian
+float learning_astar::gaussian2d(int x, int y) {
+  float gauss_value = (float) (incrementConstant * exp(-((x - mux) * (x - mux) + (y - muy) * (y - muy)) / (2 * sigma * sigma)));
+
+  return gauss_value;
 }
 
 //for making a plan using A*
@@ -250,4 +261,50 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   }
 
   return wayPoints;
+}
+
+//for updating Dynamic Map based on bumper sensors
+void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z) {
+
+  //variables for storing the position where cost is to be increased
+  float wx = 0.0, wy = 0.0;
+
+  //create Quaternion
+  tf::Quaternion botQt;
+  botQt.setW(w);
+  botQt.setZ(z);
+
+  //get angle
+  float radianAngle = (float) botQt.getAngle();
+
+  //depending upon bumperId, get perimeter points (in world frame) where we need to increase the cost
+  switch(bumperId){
+    case 0:
+      wx = (float) (x - botRadius * sin(radianAngle));
+      wy = (float) (y + botRadius * cos(radianAngle));
+      break;
+    case 1:
+      wx = (float) (x + botRadius * cos(radianAngle));
+      wy = (float) (y + botRadius * sin(radianAngle));
+      break;
+    case 3:
+      wx = (float) (x + botRadius * sin(radianAngle));
+      wy = (float) (y - botRadius * cos(radianAngle));
+      break;
+  }
+
+  //convert to mapCells
+  unsigned int mx, my;
+  worldToMap(wx, wy, &mx, &my);
+  mux = mx;
+  muy = my;
+
+  //change the dynamic Map
+  for (int i = 0; i < mapWidth_; ++i) {
+    for (int j = 0; j < mapHeight_; ++j) {
+      dynamicWorldMap[j*mapWidth_+i] = decayConstant*gaussian2d(i,j) + (1-decayConstant)*dynamicWorldMap[j*mapWidth_+i];
+    }
+  }
+
+  return;
 }

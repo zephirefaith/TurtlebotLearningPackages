@@ -28,9 +28,11 @@ class learning_astar
 public:
     //all variable members
     bool *OGM;
-    float mapResolution_;
-    int mapWidth_, mapHeight_;
     float *dynamicWorldMap;
+    float botRadius, decayConstant, mapResolution_;
+    int mapWidth_, mapHeight_;
+    int mux, muy, sigma;
+    int incrementConstant;
     geometry_msgs::Pose mapOrigin_;
     nav_msgs::OccupancyGrid worldMap_;
     geometry_msgs::PoseWithCovarianceStamped initialPosition_;
@@ -49,6 +51,8 @@ public:
     void mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy); //converts mapCells [mx,my] to [wx,wy]
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr&); //callBack for move_base_simple_goal
     void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr&); //callback for initialpose
+    void updateDynamicMap(int, float, float, float, float);
+    float gaussian2d(int, int);
 };
 
 
