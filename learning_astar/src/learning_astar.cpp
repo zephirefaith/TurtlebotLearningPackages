@@ -1,6 +1,6 @@
 //
 // Author: Priyam Parashar
-// Date: 11/11/15.
+// Date: 11/23/15.
 //
 
 //custom include
@@ -11,26 +11,31 @@
 
 //c++ includes
 #include <queue>
+#include <fstream>
 
 typedef std::pair<unsigned int, unsigned int> mapCell;
 
 //Constructor just because
-learning_astar::learning_astar(){
+learning_astar::learning_astar() {
   mapResolution_ = 0.0;
   mapHeight_ = 0;
   mapWidth_ = 0;
   mapOrigin_ = geometry_msgs::Pose();
   worldMap_ = nav_msgs::OccupancyGrid();
   dynamicWorldMap = new float;
+  traversalMap = new float;
   OGM = new bool;
   botRadius = 0.0;
 }
 
 //default Constructor
 learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
+  softObstacleX = -1;
+  softObstacleY = -1;
+  sigma = 1.5;
   botRadius = 0.2;
-  incrementConstant = 10;
-  decayConstant = 0.7;
+  incrementConstant = 50;
+  decayConstant = 0.75;
   worldMap_ = mapgrid;
   mapResolution_ = worldMap_.info.resolution;
   mapOrigin_ = worldMap_.info.origin;
@@ -38,26 +43,47 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   mapHeight_ = worldMap_.info.height;
 
   //initialize dynamic map to zero
-  dynamicWorldMap = new float[mapHeight_*mapWidth_];
+  dynamicWorldMap = new float[mapHeight_ * mapWidth_];
   for (int x = 0; x < mapWidth_; ++x) {
     for (int y = 0; y < mapHeight_; ++y) {
-      dynamicWorldMap[y*mapWidth_+x] = 0;
+      dynamicWorldMap[y * mapWidth_ + x] = 0.0;
+    }
+  }
+
+  //initialize traversal map to all zero
+  traversalMap = new float[mapHeight_ * mapWidth_];
+  for (int x = 0; x < mapWidth_; ++x) {
+    for (int y = 0; y < mapHeight_; ++y) {
+      traversalMap[y * mapWidth_ + x] = 0.0;
     }
   }
 
   //get array of occupancy values from world map
-  OGM = new bool [mapHeight_*mapWidth_];
-  for (unsigned int iy = 0; iy < mapHeight_; iy++)
-  {
-    for (unsigned int ix = 0; ix < mapWidth_; ix++)
-    {
-      unsigned int cost = static_cast<unsigned int>(worldMap_.data[iy*mapWidth_+ix]);  //map is in row major form,
+  OGM = new bool[mapHeight_ * mapWidth_];
+  for (unsigned int iy = 0; iy < mapHeight_; iy++) {
+    for (unsigned int ix = 0; ix < mapWidth_; ix++) {
+      unsigned int cost = static_cast<unsigned int>(worldMap_.data[iy * mapWidth_ + ix]);  //map is in row major form,
       // hence iy*mapWidth_
       //cout<<cost;
-      OGM[iy*mapWidth_+ix]= !cost;
+      OGM[iy * mapWidth_ + ix] = cost == 0 ? true : false;
     }
   }
 
+  //dumping the map into a CSV, to be visualized by matlab
+  std::ofstream ofs;
+  ofs.open("/home/priyamp/Documents/Codebase/MapData/StaticMap.csv", std::ofstream::out);
+
+  for (int x = 0; x < mapWidth_; ++x) {
+    for (int y = 0; y < mapHeight_; ++y) {
+      ofs << OGM[y * mapWidth_ + x];
+      if (y < mapHeight_ - 1) {
+        ofs << ",";
+      }
+    }
+    ofs << std::endl;
+  }
+
+  ofs.close();
 //  ROS_INFO("MapHeight: %d, MapWidth: %d", mapHeight_, mapWidth_);
 }
 
@@ -81,28 +107,29 @@ void learning_astar::updateGoalPosition(const geometry_msgs::PoseStampedConstPtr
 //for converting from world co-ordinates to map-cells
 void learning_astar::worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my) {
   *mx = (unsigned int) ((wx - mapOrigin_.position.x) / mapResolution_);
-  *my = (unsigned int) ((wy - mapOrigin_.position.y)/mapResolution_);
+  *my = (unsigned int) ((wy - mapOrigin_.position.y) / mapResolution_);
 
   return;
 }
 
 //change from map to world co-ordinates
 void learning_astar::mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy) {
-  *wx = (float) (mx*mapResolution_*1.0 + mapOrigin_.position.x);
-  *wy = (float) (my*mapResolution_*1.0 + mapOrigin_.position.y);
+  *wx = (float) (mx * mapResolution_ * 1.0 + mapOrigin_.position.x);
+  *wy = (float) (my * mapResolution_ * 1.0 + mapOrigin_.position.y);
 
   return;
 }
 
 //for converting from mapCell to index
 int learning_astar::toIndex(mapCell cell) {
-  int index = cell.second*mapWidth_+cell.first;
+  int index = cell.second * mapWidth_ + cell.first;
   return index;
 }
 
 //heuristic function
 float learning_astar::h(mapCell current, mapCell goal) {
-  float hScore = (float) sqrt((current.first - goal.first) * (current.first - goal.first) + (current.second - goal.second) * (current.second - goal.second));
+  float hScore = (float) sqrt((current.first - goal.first) * (current.first - goal.first) +
+                              (current.second - goal.second) * (current.second - goal.second));
 
   return hScore;
 }
@@ -114,8 +141,10 @@ bool learning_astar::isFree(mapCell cell) {
 
 //for calculating cost of travelling from one mapCell to other
 float learning_astar::cost(mapCell current, mapCell next) {
-  float hopCost = (float) sqrt((current.first - next.first) * (current.first - next.first) + (current.second - next.second) * (current
-                                                                                                               .second - next.second));
+  float hopCost = (float) sqrt(
+      (current.first - next.first) * (current.first - next.first) + (current.second - next.second) * (current
+                                                                                                          .second -
+                                                                                                      next.second));
 
   return hopCost;
 }
@@ -133,7 +162,14 @@ geometry_msgs::Pose learning_astar::getPose(mapCell cell) {
 
 //a 2d gaussian
 float learning_astar::gaussian2d(int x, int y) {
-  float gauss_value = (float) (incrementConstant * exp(-((x - mux) * (x - mux) + (y - muy) * (y - muy)) / (2 * sigma * sigma)));
+  if (x < 0 || y < 0)
+    return 0.0;
+
+  float gauss_value = (float) (incrementConstant *
+                               exp(-((x - softObstacleX) * (x - softObstacleX) + (y - softObstacleY) * (y -
+                                                                                                        softObstacleY)) /
+                                   (2 * sigma *
+                                    sigma)));
 
   return gauss_value;
 }
@@ -142,7 +178,7 @@ float learning_astar::gaussian2d(int x, int y) {
 std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
   //for neighbors
-  int dx[3] = {-1, 0,1 };
+  int dx[3] = {-1, 0, 1};
   int dy[3] = {-1, 0, 1};
 
   //get initial location
@@ -156,7 +192,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   ROS_INFO("Goal on map: (%d, %d)", gx, gy);
 
   //store initial and goal position
-  mapCell initialPose = std::make_pair(mx,my), goalPose = std::make_pair(gx,gy);
+  mapCell initialPose = std::make_pair(mx, my), goalPose = std::make_pair(gx, gy);
 
   //resultant vector with waypoints
   std::vector<geometry_msgs::Pose> wayPoints;
@@ -166,25 +202,32 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   bool goalFound = false;
 
   //initialize gValues to highest value everywhere, except for the initial position, that should be 0
-  float* gMap = new float[mapHeight_*mapWidth_];
+  float *gMap = new float[mapHeight_ * mapWidth_];
   int initialIndex = toIndex(initialPose);
   for (int x = 0; x < mapWidth_; ++x) {
     for (int y = 0; y < mapHeight_; ++y) {
-      gMap[y*mapWidth_+x] = 255;
+      gMap[y * mapWidth_ + x] = FLT_MAX;
     }
   }
   gMap[initialIndex] = 0;
 
+  //reset traversal values to zero
+  for (int x = 0; x < mapWidth_; ++x) {
+    for (int y = 0; y < mapHeight_; ++y) {
+      traversalMap[y * mapWidth_ + x] = 0.0;
+    }
+  }
+
   //set up variables: a heap for storing open list sorted on increasing f(), a closed map for looking up if a
   // neighboring cell has already been visited
-  std::map< mapCell, mapCell > closedSet, openSet, parent;
-  std::map< float, mapCell > openList;
+  std::map<mapCell, mapCell> closedSet, openSet, parent;
+  std::map<float, mapCell> openList;
   mapCell current;
 
   ROS_INFO("Finding an A* plan...");
   current = initialPose;
   openList[0] = current;
-  while(!openList.empty() && !goalFound){
+  while (!openList.empty() && !goalFound) {
 
     current = openList.begin()->second;
     openList.erase(openList.begin());
@@ -195,8 +238,8 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
     for (int i = 0; i < 3 && !goalFound; ++i) {
       for (int j = 0; j < 3 && !goalFound; ++j) {
 
-        unsigned int nx = current.first+dx[i], ny = current.second+dy[j];
-        mapCell neighbor = std::make_pair(nx,ny);
+        unsigned int nx = current.first + dx[i], ny = current.second + dy[j];
+        mapCell neighbor = std::make_pair(nx, ny);
 
         if (isFree(neighbor)) {
           //check if the neighboring cell is free and has not been explored already
@@ -230,28 +273,28 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
               }
 
-              if(openIt == openSet.end()) {
+              if (openIt == openSet.end()) {
                 openSet[neighbor] = neighbor;
               }
             }
-            }
-
           }
-        }
 
+        }
       }
-        //getchar();
+
     }
+    //getchar();
+  }
 
 
   //if goal was found, backtrack to get the waypoints or just return an empty waypoints vector
-  if(goalFound){
+  if (goalFound) {
 
     ROS_INFO("Found a plan...creating waypoints");
 
     //push back parents until map has no more
-    std::map< mapCell, mapCell>::iterator mapIt = parent.find(current);
-    while(mapIt!=parent.end()) {
+    std::map<mapCell, mapCell>::iterator mapIt = parent.find(current);
+    while (mapIt != parent.end()) {
       wayPoints.push_back(getPose(current));
       current = parent[current];
       mapIt = parent.find(current);
@@ -278,7 +321,10 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
   float radianAngle = (float) botQt.getAngle();
 
   //depending upon bumperId, get perimeter points (in world frame) where we need to increase the cost
-  switch(bumperId){
+  switch (bumperId) {
+    case -1:
+      //no collision, hence no need to do anything
+      break;
     case 0:
       wx = (float) (x - botRadius * sin(radianAngle));
       wy = (float) (y + botRadius * cos(radianAngle));
@@ -287,24 +333,53 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
       wx = (float) (x + botRadius * cos(radianAngle));
       wy = (float) (y + botRadius * sin(radianAngle));
       break;
-    case 3:
+    case 2:
       wx = (float) (x + botRadius * sin(radianAngle));
       wy = (float) (y - botRadius * cos(radianAngle));
       break;
   }
 
-  //convert to mapCells
+  //convert to mapCells, only if there was a collision
   unsigned int mx, my;
-  worldToMap(wx, wy, &mx, &my);
-  mux = mx;
-  muy = my;
+  if (bumperId >= 0) {
+    worldToMap(wx, wy, &mx, &my);
+    softObstacleX = mx;
+    softObstacleY = my;
+    worldToMap(x,y,&mx,&my);
+    ROS_INFO("Obstacle position: %d, %d", softObstacleX, softObstacleY);
+    ROS_INFO("Robot was at: %d, %d", mx, my);
+  }
 
-  //change the dynamic Map
+  //change the dynamic Map, do anyways, because the map should decay to all zeros, even not bumping into anything is
+  // an experience
   for (int i = 0; i < mapWidth_; ++i) {
     for (int j = 0; j < mapHeight_; ++j) {
-      dynamicWorldMap[j*mapWidth_+i] = decayConstant*gaussian2d(i,j) + (1-decayConstant)*dynamicWorldMap[j*mapWidth_+i];
+      if (bumperId >= 0) {
+        dynamicWorldMap[j * mapWidth_ + i] =
+            decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
+      }
+      else {
+        dynamicWorldMap[j * mapWidth_ + i] =
+            (1 - decayConstant) * gaussian2d(i, j) + decayConstant * dynamicWorldMap[j * mapWidth_ + i];
+      }
     }
   }
+
+  //dumping the dynamic map into a CSV, to be visualized by matlab
+  std::ofstream ofs;
+  ofs.open("/home/priyamp/Documents/Codebase/MapData/DynamicMap1.csv", std::ofstream::out);
+
+  for (int x = 0; x < mapWidth_; ++x) {
+    for (int y = 0; y < mapHeight_; ++y) {
+      ofs << dynamicWorldMap[y * mapWidth_ + x];
+      if (y < mapHeight_ - 1) {
+        ofs << ",";
+      }
+    }
+    ofs << std::endl;
+  }
+
+  ofs.close();
 
   return;
 }

@@ -1,6 +1,6 @@
 //
 // Author: Priyam Parashar
-// Date: 11/10/15.
+// Date: 11/23/15.
 //
 
 //custom includes
@@ -23,28 +23,37 @@
 typedef actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> MoveBaseClient;
 
 //global variables
-float currPosX = 0.0 , currPosY = 0.0, currOrW = 0.0, currOrZ = 0.0;
-bool stuck  = false;
+float currPosX = 0.0, currPosY = 0.0, currOrW = 0.0, currOrZ = 0.0;
+bool stuck = false;
 bool userActive = false;
-int bumperId = 0;
+int bumperId = -1;
 
 //callbacks
+
+//feedback callback from action client
+//TODO make this a learning_astar class member, make it update initial_position everytime
 void updateCurrentPose(const move_base_msgs::MoveBaseFeedbackConstPtr &msg) {
   currPosX = (float) msg->base_position.pose.position.x;
   currPosY = (float) msg->base_position.pose.position.y;
   currOrW = (float) msg->base_position.pose.orientation.w;
   currOrZ = (float) msg->base_position.pose.orientation.z;
 
+  if (userActive) {
+    //TODO update the traversal map with ones
+
+  }
+
   return;
 }
 
-void userFeedbackCb(const std_msgs::StringConstPtr &msg){
-
+//for replan message from rms
+void rmsDoneCb(const std_msgs::StringConstPtr &msg){
+  userActive = false;
 
   return;
 }
 
-void bumperCb(const kobuki_msgs::BumperEventConstPtr &msg){
+void bumperCb(const kobuki_msgs::BumperEventConstPtr &msg) {
   stuck = true;
   bumperId = msg->bumper;
   ROS_INFO("ROBOT BUMPED INTO UNFORESEEN OBSTACLE!!!");
@@ -52,7 +61,10 @@ void bumperCb(const kobuki_msgs::BumperEventConstPtr &msg){
   return;
 }
 
-int main(int argc, char **argv){
+
+//main
+
+int main(int argc, char **argv) {
 
   ////////////
   // Setup //
@@ -66,6 +78,11 @@ int main(int argc, char **argv){
 
   //publisher topic for RMS calls
   ros::Publisher stuckPub = nh.advertise<std_msgs::String>("robot_stuck", 10);
+
+  //subscriber for RMS feedback
+  ros::Subscriber rmsSub = nh.subscribe("user_feedback", 10, &rmsDoneCb);
+  //subscriber for bumper event
+  ros::Subscriber bumperSub = nh.subscribe("/mobile_base/events/bumper", 50, bumperCb);
 
   //client for map_server static_map service
   nav_msgs::GetMap mapRequest;
@@ -81,8 +98,8 @@ int main(int argc, char **argv){
   ///////////////////////////////////////
 
 
-  //get the map response
-  if(client.call(mapRequest)){
+  //request for Map
+  if (client.call(mapRequest)) {
     ROS_INFO("Received map from the 'static_map' service");
     response = mapRequest.response.map;
   }
@@ -91,23 +108,25 @@ int main(int argc, char **argv){
   learning_astar astar(response);
   ROS_INFO("LRTA* object created successfully");
 
-  while(ros::ok()) {
+  //get initial position on rviz
+  ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updateInitialPosition, &astar);
+  ROS_INFO("Waiting for the initial pose from RViz");
+  while (astar.initialPosition_.header.frame_id.size() == 0) {
+    ros::spinOnce();
+  }
 
-    //get initial position on rviz
-    ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updateInitialPosition, &astar);
-    ROS_INFO("Waiting for the initial pose from RViz");
-    while (astar.initialPosition_.header.frame_id.size()==0){
-      ros::spinOnce();
-    }
+  while (ros::ok()) {
+
+    //reset flags
+    backToTop = false;
+    stuck = false;
 
     //get the goal on rviz
     ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
     ROS_INFO("Waiting for the goal from RViz");
-    while (astar.goalPosition_.header.frame_id.size()==0){
+    while (astar.goalPosition_.header.frame_id.size() == 0) {
       ros::spinOnce();
     }
-
-    //TODO check if the initial and goal positions are valid and ask the user to enter them again if they aren't
 
 
     //////////////////////////////
@@ -121,7 +140,7 @@ int main(int argc, char **argv){
     wayPoints = astar.makePlan();
 
     //to pass every nth waypoint to move_base so that it has a substantial way to go to
-    int skipCount = 10, count = 0;
+    int skipCount = 8, count = 0;
 
     //last sparseWaypoint should be the goal itself
     geometry_msgs::Pose temp;
@@ -147,9 +166,9 @@ int main(int argc, char **argv){
     }
 
 
-    //////////////////////////////////////
-    // Move  turtlebot as per the plan //
     /////////////////////////////////////
+    // Move turtlebot as per the plan //
+    ////////////////////////////////////
 
 
     //threshold for goal
@@ -182,17 +201,18 @@ int main(int argc, char **argv){
       goal.target_pose.header.stamp = ros::Time::now();
       goal.target_pose.pose.position.x = currentGoal.position.x;
       goal.target_pose.pose.position.y = currentGoal.position.y;
-      goal.target_pose.pose.orientation.z = astar.initialPosition_.pose.pose.orientation.z;
-      goal.target_pose.pose.orientation.w = astar.initialPosition_.pose.pose.orientation.w;
+      goal.target_pose.pose.orientation.z = astar.goalPosition_.pose.orientation.z;
+      goal.target_pose.pose.orientation.w = astar.goalPosition_.pose.orientation.w;
 
       //send the goal and add a feedback callback
-      ROS_INFO("Sending waypoint: %f, %f", goal.target_pose.pose.position.x, goal.target_pose.pose.position.y);
+      ROS_INFO("Chasing waypoint: %f, %f", goal.target_pose.pose.position.x, goal.target_pose.pose.position.y);
       ac.sendGoal(goal, MoveBaseClient::SimpleDoneCallback(), MoveBaseClient::SimpleActiveCallback(),
                   &updateCurrentPose);
+      ROS_INFO("Tracking events now...");
 
       //track the status of bumper event
       bool atWaypoint = false;
-      ros::Subscriber bumperSub = nh.subscribe("/mobile_base/events/bumper", 50, bumperCb);
+
       while (!atWaypoint) {
         float distance = (float) sqrt((currPosX - currentGoal.position.x) * (currPosX - currentGoal.position.x) +
                                       (currPosY - currentGoal.position.y) * (currPosY - currentGoal.position.y));
@@ -204,18 +224,19 @@ int main(int argc, char **argv){
 
         //case 2: robot gets stuck: cancel goal pursuit -> call RMS -> wait for RMS to exit -> update costs -> get
         // new plan
-        if(stuck){
+        if (stuck) {
 
           ROS_INFO("Engage SOS behaviour...");
 
           //cancel pursuing of goal
           ROS_INFO("Cancelling goal pursuit");
           ac.cancelGoal();
+          ros::Duration(2.0).sleep();
 
           //publish to robot_stuck topic for RMS to take over
           std_msgs::String sosMsg;
           std::stringstream ss;
-          ss << "STUCK" ;
+          ss << "STUCK";
           sosMsg.data = ss.str();
           ROS_INFO("Calling out to RMS");
           stuckPub.publish(sosMsg);
@@ -223,30 +244,49 @@ int main(int argc, char **argv){
 
           //wait for RMS to handover control
           ROS_INFO("Waiting for user to finish helping the bot...");
-          while(userActive){
+          while (userActive) {
             ros::spinOnce();
           }
 
           //update DynamicMap
           ROS_INFO("Gathering relevant info from this interaction...");
           astar.updateDynamicMap(bumperId, currPosX, currPosY, currOrW, currOrZ);
+          bumperId = -1;
 
-          //send back to top to get initial pose and goal pose from RViz for recomputation of an A* plan
+          //reinitialize the initialPosition for plan making purposes, subscribe to amcl_pose
+          astar.initialPosition_.header.frame_id = std::string();
+          ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, &learning_astar::updateInitialPosition, &astar);
+          while(astar.initialPosition_.header.frame_id.size()==0){
+            ros::spinOnce();
+          }
+
+          //send back to top to get goal pose from RViz for recomputation of an A* plan
           backToTop = true;
         }
 
-        if(backToTop){
+        if (backToTop) {
           break;
         }
         ros::spinOnce();
       }
-      if(backToTop){
+      if (backToTop) {
         break;
       }
+      ros::spinOnce();
     }
-    if(!backToTop){
+    if (!backToTop) {
       ROS_INFO("Successfully reached the goal");
+      //reinitialize the initialPosition, for plan making purposes, using the last received updated position of
+      // the turtlebot
+      astar.initialPosition_.pose.pose.position.x = currPosX;
+      astar.initialPosition_.pose.pose.position.y = currPosY;
+      astar.initialPosition_.pose.pose.orientation.w = currOrW;
+      astar.initialPosition_.pose.pose.orientation.z = currOrZ;
     }
+
+    //reset goal frame_id to get a new one again
+    astar.goalPosition_.header.frame_id = std::string();
+    ros::spinOnce();
   }
 
   return 0;
