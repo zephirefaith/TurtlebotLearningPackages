@@ -321,23 +321,25 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
   float radianAngle = (float) botQt.getAngle();
 
   //depending upon bumperId, get perimeter points (in world frame) where we need to increase the cost
-  switch (bumperId) {
-    case -1:
-      //no collision, hence no need to do anything
-      break;
-    case 0:
-      wx = (float) (x - botRadius * sin(radianAngle));
-      wy = (float) (y + botRadius * cos(radianAngle));
-      break;
-    case 1:
-      wx = (float) (x + botRadius * cos(radianAngle));
-      wy = (float) (y + botRadius * sin(radianAngle));
-      break;
-    case 2:
-      wx = (float) (x + botRadius * sin(radianAngle));
-      wy = (float) (y - botRadius * cos(radianAngle));
-      break;
-  }
+//  switch (bumperId) {
+//    case -1:
+//      //no collision, hence no need to do anything
+//      break;
+//    case 0:
+//      wx = (float) (x - botRadius * sin(radianAngle));
+//      wy = (float) (y + botRadius * cos(radianAngle));
+//      break;
+//    case 1:
+//      wx = (float) (x + botRadius * cos(radianAngle));
+//      wy = (float) (y + botRadius * sin(radianAngle));
+//      break;
+//    case 2:
+//      wx = (float) (x + botRadius * sin(radianAngle));
+//      wy = (float) (y - botRadius * cos(radianAngle));
+//      break;
+//  }
+  wx = (float) (x + botRadius * cos(radianAngle));
+  wy = (float) (y + botRadius * sin(radianAngle));
 
   //convert to mapCells, only if there was a collision
   unsigned int mx, my;

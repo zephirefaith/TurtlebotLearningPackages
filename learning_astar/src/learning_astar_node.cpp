@@ -56,7 +56,7 @@ void rmsDoneCb(const std_msgs::StringConstPtr &msg){
 void bumperCb(const kobuki_msgs::BumperEventConstPtr &msg) {
   stuck = true;
   bumperId = msg->bumper;
-  ROS_INFO("ROBOT BUMPED INTO UNFORESEEN OBSTACLE!!!");
+  ROS_INFO("ROBOT BUMPED INTO UNFORESEEN OBSTACLE!!!...%d", bumperId);
 
   return;
 }
@@ -140,7 +140,7 @@ int main(int argc, char **argv) {
     wayPoints = astar.makePlan();
 
     //to pass every nth waypoint to move_base so that it has a substantial way to go to
-    int skipCount = 8, count = 0;
+    int skipCount = 3, count = 0;
 
     //last sparseWaypoint should be the goal itself
     geometry_msgs::Pose temp;
