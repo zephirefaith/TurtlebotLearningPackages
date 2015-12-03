@@ -162,7 +162,7 @@ geometry_msgs::Pose learning_astar::getPose(mapCell cell) {
 
 //a 2d gaussian
 float learning_astar::gaussian2d(int x, int y) {
-  if (x < 0 || y < 0)
+  if (softObstacleX < 0 || softObstacleY < 0)
     return 0.0;
 
   float gauss_value = (float) (incrementConstant *
@@ -308,6 +308,9 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
 //for updating Dynamic Map based on bumper sensors
 void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z) {
+  //reset soft obstacle position
+  softObstacleX = -1;
+  softObstacleY = -1;
 
   //variables for storing the position where cost is to be increased
   float wx = 0.0, wy = 0.0;
@@ -348,22 +351,14 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
     softObstacleX = mx;
     softObstacleY = my;
     worldToMap(x,y,&mx,&my);
-    ROS_INFO("Obstacle position: %d, %d", softObstacleX, softObstacleY);
-    ROS_INFO("Robot was at: %d, %d", mx, my);
   }
 
   //change the dynamic Map, do anyways, because the map should decay to all zeros, even not bumping into anything is
   // an experience
   for (int i = 0; i < mapWidth_; ++i) {
     for (int j = 0; j < mapHeight_; ++j) {
-      if (bumperId >= 0) {
-        dynamicWorldMap[j * mapWidth_ + i] =
-            decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
-      }
-      else {
-        dynamicWorldMap[j * mapWidth_ + i] =
-            (1 - decayConstant) * gaussian2d(i, j) + decayConstant * dynamicWorldMap[j * mapWidth_ + i];
-      }
+      dynamicWorldMap[j * mapWidth_ + i] =
+          decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
     }
   }
 

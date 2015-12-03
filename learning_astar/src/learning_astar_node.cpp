@@ -286,6 +286,12 @@ int main(int argc, char **argv) {
 
     //reset goal frame_id to get a new one again
     astar.goalPosition_.header.frame_id = std::string();
+
+    //update DynamicMap
+    ROS_INFO("Updating map post-run");
+    astar.updateDynamicMap(bumperId, currPosX, currPosY, currOrW, currOrZ);
+    bumperId = -1;
+
     ros::spinOnce();
   }
 
