@@ -319,7 +319,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z) {
   //inflate the traversal map using openCV
   cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
-  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2*botRadius+1, 2*botRadius+1));
+  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(1.5*botRadius, 1.5*botRadius));
   cv::dilate(mapImage, dilatedMap, element);
 
   //reset soft obstacle position
@@ -338,25 +338,25 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
   float radianAngle = (float) botQt.getAngle();
 
   //depending upon bumperId, get perimeter points (in world frame) where we need to increase the cost
-//  switch (bumperId) {
-//    case -1:
-//      //no collision, hence no need to do anything
-//      break;
-//    case 0:
-//      wx = (float) (x - botRadius * sin(radianAngle));
-//      wy = (float) (y + botRadius * cos(radianAngle));
-//      break;
-//    case 1:
-//      wx = (float) (x + botRadius * cos(radianAngle));
-//      wy = (float) (y + botRadius * sin(radianAngle));
-//      break;
-//    case 2:
-//      wx = (float) (x + botRadius * sin(radianAngle));
-//      wy = (float) (y - botRadius * cos(radianAngle));
-//      break;
-//  }
-  wx = (float) (x + botRadius * cos(radianAngle));
-  wy = (float) (y + botRadius * sin(radianAngle));
+  switch (bumperId) {
+    case -1:
+      //no collision, hence no need to do anything
+      break;
+    case 0:
+      wx = (float) (x + botRadius * cos(radianAngle+0.78));
+      wy = (float) (y + botRadius * sin(radianAngle+0.78));
+      break;
+    case 1:
+      wx = (float) (x + botRadius * cos(radianAngle));
+      wy = (float) (y + botRadius * sin(radianAngle));
+      break;
+    case 2:
+      wx = (float) (x + botRadius * cos(radianAngle-0.78));
+      wy = (float) (y + botRadius * sin(radianAngle-0.78));
+      break;
+  }
+//  wx = (float) (x + botRadius * cos(radianAngle));
+//  wy = (float) (y + botRadius * sin(radianAngle));
 
   //convert to mapCells, only if there was a collision
   unsigned int mx, my;
