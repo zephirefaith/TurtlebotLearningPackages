@@ -31,7 +31,6 @@ int bumperId = -1;
 //callbacks
 
 //feedback callback from action client
-//TODO make this a learning_astar class member, make it update initial_position everytime
 void updateCurrentPose(const move_base_msgs::MoveBaseFeedbackConstPtr &msg) {
   currPosX = (float) msg->base_position.pose.position.x;
   currPosY = (float) msg->base_position.pose.position.y;
@@ -241,12 +240,15 @@ int main(int argc, char **argv) {
           ROS_INFO("Calling out to RMS");
           stuckPub.publish(sosMsg);
           userActive = true;
+          astar.userActive = true;
 
           //wait for RMS to handover control
           ROS_INFO("Waiting for user to finish helping the bot...");
-          while (userActive) {
+          ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, &learning_astar::updateInitialPosition, &astar);
+          while (userActive){
             ros::spinOnce();
           }
+          astar.userActive = false;
 
           //update DynamicMap
           ROS_INFO("Gathering relevant info from this interaction...");
@@ -255,7 +257,6 @@ int main(int argc, char **argv) {
 
           //reinitialize the initialPosition for plan making purposes, subscribe to amcl_pose
           astar.initialPosition_.header.frame_id = std::string();
-          ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, &learning_astar::updateInitialPosition, &astar);
           while(astar.initialPosition_.header.frame_id.size()==0){
             ros::spinOnce();
           }

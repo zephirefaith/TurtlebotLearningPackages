@@ -3,11 +3,15 @@
 // Date: 11/23/15.
 //
 
-//custom include
+//custom includes
 #include "../include/learning_astar/learning_astar.h"
 
 //ros includes
 #include <tf/LinearMath/Quaternion.h>
+
+//opencv
+#include "opencv2/core/core.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 
 //c++ includes
 #include <queue>
@@ -41,6 +45,7 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   mapOrigin_ = worldMap_.info.origin;
   mapWidth_ = worldMap_.info.width;
   mapHeight_ = worldMap_.info.height;
+  userActive = false;
 
   //initialize dynamic map to zero
   dynamicWorldMap = new float[mapHeight_ * mapWidth_];
@@ -90,8 +95,12 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
 //for updating initial position of the robot
 void learning_astar::updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg) {
   initialPosition_ = *msg;
-  ROS_INFO("Received turtlebot's inital position, x: %f, y: %f", initialPosition_.pose.pose.position.x,
-           initialPosition_.pose.pose.position.y);
+
+  if(userActive){
+    unsigned int mx,my;
+    worldToMap(initialPosition_.pose.pose.position.x, initialPosition_.pose.pose.position.y, &mx, &my);
+    traversalMap[my*mapWidth_+mx] = 50;
+  }
 
   return;
 }
@@ -308,6 +317,11 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
 //for updating Dynamic Map based on bumper sensors
 void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z) {
+  //inflate the traversal map using openCV
+  cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
+  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(2*botRadius+1, 2*botRadius+1));
+  cv::dilate(mapImage, dilatedMap, element);
+
   //reset soft obstacle position
   softObstacleX = -1;
   softObstacleY = -1;
@@ -354,13 +368,20 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
   }
 
   //change the dynamic Map, do anyways, because the map should decay to all zeros, even not bumping into anything is
-  // an experience
+  // an experience...also clear out the places the robot believes it has traversed
   for (int i = 0; i < mapWidth_; ++i) {
     for (int j = 0; j < mapHeight_; ++j) {
-      dynamicWorldMap[j * mapWidth_ + i] =
-          decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
+      if (dilatedMap.at<float>(i,j)==0.0) {
+        dynamicWorldMap[j * mapWidth_ + i] =
+            decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
+      } else {
+        dynamicWorldMap[j*mapHeight_+i] = 0;
+      }
     }
   }
+
+  //reset the traversalMap to all zeros
+  std::fill_n(traversalMap, mapHeight_*mapWidth_, 0.0);
 
   //dumping the dynamic map into a CSV, to be visualized by matlab
   std::ofstream ofs;

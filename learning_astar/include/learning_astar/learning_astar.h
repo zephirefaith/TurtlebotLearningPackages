@@ -27,7 +27,7 @@ class learning_astar
 {
 public:
     //all variable members
-    bool *OGM;
+    bool *OGM, userActive;
     float *dynamicWorldMap, *traversalMap;
     float botRadius, decayConstant, mapResolution_;
     int mapWidth_, mapHeight_;
