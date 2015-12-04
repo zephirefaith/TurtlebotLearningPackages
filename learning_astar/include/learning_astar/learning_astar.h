@@ -60,7 +60,7 @@ public:
     void mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy); //converts mapCells [mx,my] to [wx,wy]
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr &); //callBack for move_base_simple_goal
     void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &); //callback for initialpose
-    void updateDynamicMap(int, float, float, float, float);
+    void updateDynamicMap(int, float, float, float, float, int);
 
     float gaussian2d(int, int);
 };

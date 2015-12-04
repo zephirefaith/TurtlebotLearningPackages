@@ -16,6 +16,7 @@
 #include <move_base_msgs/MoveBaseAction.h>
 #include <std_msgs/String.h>
 #include <kobuki_msgs/BumperEvent.h>
+#include <geometry_msgs/Twist.h>
 
 //c++ includes
 
@@ -54,7 +55,9 @@ void rmsDoneCb(const std_msgs::StringConstPtr &msg){
 
 void bumperCb(const kobuki_msgs::BumperEventConstPtr &msg) {
   stuck = true;
-  bumperId = msg->bumper;
+  if(bumperId<0){
+    bumperId = msg->bumper;
+  }
   ROS_INFO("ROBOT BUMPED INTO UNFORESEEN OBSTACLE!!!...%d", bumperId);
 
   return;
@@ -91,6 +94,9 @@ int main(int argc, char **argv) {
   //flags
   bool backToTop = false;
 
+  //temp variables
+  int updateCount = 0;
+
 
   ////////////////////////////////////////
   // Collecting relevant data from ROS //
@@ -121,11 +127,14 @@ int main(int argc, char **argv) {
     stuck = false;
 
     //get the goal on rviz
-    ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
-    ROS_INFO("Waiting for the goal from RViz");
-    while (astar.goalPosition_.header.frame_id.size() == 0) {
-      ros::spinOnce();
+    if(astar.goalPosition_.header.frame_id.size() == 0){
+      ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
+      ROS_INFO("Waiting for the goal from RViz");
+      while (astar.goalPosition_.header.frame_id.size() == 0) {
+        ros::spinOnce();
+      }
     }
+
 
 
     //////////////////////////////
@@ -209,7 +218,7 @@ int main(int argc, char **argv) {
                   &updateCurrentPose);
       ROS_INFO("Tracking events now...");
 
-      //track the status of bumper event
+      //track goal progress
       bool atWaypoint = false;
 
       while (!atWaypoint) {
@@ -228,9 +237,40 @@ int main(int argc, char **argv) {
           ROS_INFO("Engage SOS behaviour...");
 
           //cancel pursuing of goal
-          ROS_INFO("Cancelling goal pursuit");
-          ac.cancelGoal();
-          ros::Duration(2.0).sleep();
+          ROS_INFO("Cancelling goal pursuit and waiting");
+          ac.cancelAllGoals();
+          ros::Duration(3.0).sleep();
+
+          //store current position, to be used for updating the map
+          float stuckX, stuckY, stuckW, stuckZ;
+          stuckX = currPosX;
+          stuckY = currPosY;
+          stuckW = currOrW;
+          stuckZ = currOrZ;
+
+          //backup the robot for 0.5 m
+          ROS_INFO("Backing up AssFace");
+          ros::Publisher velPub = nh.advertise<geometry_msgs::Twist>("cmd_vel_mux/input/teleop", 10);
+          geometry_msgs::Twist velocity;
+          switch(bumperId){
+            case 0:
+              velocity.linear.x =
+              break;
+            case 1:
+              velocity.linear.x = -1.0;
+              velocity.linear.y = -1.0;
+              break;
+            case 2:
+              break;
+          }
+          velocity.angular.z=0.0;
+          velPub.publish(velocity);
+
+          ros::Duration(1.5).sleep();
+
+          velocity.linear.x = 0.0;
+          velocity.linear.y = 0.0;
+          velPub.publish(velocity);
 
           //publish to robot_stuck topic for RMS to take over
           std_msgs::String sosMsg;
@@ -252,14 +292,14 @@ int main(int argc, char **argv) {
 
           //update DynamicMap
           ROS_INFO("Gathering relevant info from this interaction...");
-          astar.updateDynamicMap(bumperId, currPosX, currPosY, currOrW, currOrZ);
+          astar.updateDynamicMap(bumperId, stuckX, stuckY, stuckW, stuckZ, updateCount++);
           bumperId = -1;
 
           //reinitialize the initialPosition for plan making purposes, subscribe to amcl_pose
-          astar.initialPosition_.header.frame_id = std::string();
-          while(astar.initialPosition_.header.frame_id.size()==0){
-            ros::spinOnce();
-          }
+//          astar.initialPosition_.header.frame_id = std::string();
+//          while(astar.initialPosition_.header.frame_id.size()==0){
+//            ros::spinOnce();
+//          }
 
           //send back to top to get goal pose from RViz for recomputation of an A* plan
           backToTop = true;
@@ -277,21 +317,23 @@ int main(int argc, char **argv) {
     }
     if (!backToTop) {
       ROS_INFO("Successfully reached the goal");
+      //cancel goals to make sure move_base isn't still trying to get somewhere it doesn't need to
+      ac.cancelAllGoals();
       //reinitialize the initialPosition, for plan making purposes, using the last received updated position of
       // the turtlebot
       astar.initialPosition_.pose.pose.position.x = currPosX;
       astar.initialPosition_.pose.pose.position.y = currPosY;
       astar.initialPosition_.pose.pose.orientation.w = currOrW;
       astar.initialPosition_.pose.pose.orientation.z = currOrZ;
+
+      //update DynamicMap
+      ROS_INFO("Updating map post-run");
+      astar.updateDynamicMap(bumperId, currPosX, currPosY, currOrW, currOrZ, updateCount++);
+      bumperId = -1;
+
+      //reset goal frame_id to get a new one again
+      astar.goalPosition_.header.frame_id = std::string();
     }
-
-    //reset goal frame_id to get a new one again
-    astar.goalPosition_.header.frame_id = std::string();
-
-    //update DynamicMap
-    ROS_INFO("Updating map post-run");
-    astar.updateDynamicMap(bumperId, currPosX, currPosY, currOrW, currOrZ);
-    bumperId = -1;
 
     ros::spinOnce();
   }

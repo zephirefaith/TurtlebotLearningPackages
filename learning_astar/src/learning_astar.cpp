@@ -36,10 +36,10 @@ learning_astar::learning_astar() {
 learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   softObstacleX = -1;
   softObstacleY = -1;
-  sigma = 1.5;
+  sigma = 0.8;
   botRadius = 0.2;
-  incrementConstant = 50;
-  decayConstant = 0.75;
+  incrementConstant = 300;
+  decayConstant = 0.6;
   worldMap_ = mapgrid;
   mapResolution_ = worldMap_.info.resolution;
   mapOrigin_ = worldMap_.info.origin;
@@ -68,13 +68,12 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   for (unsigned int iy = 0; iy < mapHeight_; iy++) {
     for (unsigned int ix = 0; ix < mapWidth_; ix++) {
       unsigned int cost = static_cast<unsigned int>(worldMap_.data[iy * mapWidth_ + ix]);  //map is in row major form,
-      // hence iy*mapWidth_
-      //cout<<cost;
-      OGM[iy * mapWidth_ + ix] = cost == 0 ? true : false;
+                                                                                          // hence iy*mapWidth_
+      OGM[iy * mapWidth_ + ix] = cost==0;
     }
   }
 
-  //dumping the map into a CSV, to be visualized by matlab
+  //  //dumping the map into a CSV, to be visualized by matlab
   std::ofstream ofs;
   ofs.open("/home/priyamp/Documents/Codebase/MapData/StaticMap.csv", std::ofstream::out);
 
@@ -89,6 +88,50 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   }
 
   ofs.close();
+
+  //TODO deal with later
+//  //inflate temp
+//  cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, temp), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
+//  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+//  cv::dilate(mapImage, dilatedMap, element);
+//
+//  OGM = new bool[mapHeight_ * mapWidth_];
+//  for (unsigned int iy = 0; iy < mapHeight_; iy++) {
+//    for (unsigned int ix = 0; ix < mapWidth_; ix++) {
+//      OGM[iy * mapWidth_ + ix] = dilatedMap.at<float>(ix, iy) == 0.0;
+//    }
+//  }
+//
+//  //dumping the map into a CSV, to be visualized by matlab
+//  std::ofstream ofs;
+//  ofs.open("/home/priyamp/Documents/Codebase/MapData/temp.csv", std::ofstream::out);
+//
+//  for (int x = 0; x < mapWidth_; ++x) {
+//    for (int y = 0; y < mapHeight_; ++y) {
+//      ofs << temp[y * mapWidth_ + x];
+//      if (y < mapHeight_ - 1) {
+//        ofs << ",";
+//      }
+//    }
+//    ofs << std::endl;
+//  }
+//
+//  ofs.close();
+//
+//  //dumping the map into a CSV, to be visualized by matlab
+//  ofs.open("/home/priyamp/Documents/Codebase/MapData/Erodedtemp.csv", std::ofstream::out);
+//
+//  for (int x = 0; x < mapWidth_; ++x) {
+//    for (int y = 0; y < mapHeight_; ++y) {
+//      ofs << dilatedMap.at<float>(x,y);
+//      if (y < mapHeight_ - 1) {
+//        ofs << ",";
+//      }
+//    }
+//    ofs << std::endl;
+//  }
+//
+//  ofs.close();
 //  ROS_INFO("MapHeight: %d, MapWidth: %d", mapHeight_, mapWidth_);
 }
 
@@ -316,10 +359,10 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 }
 
 //for updating Dynamic Map based on bumper sensors
-void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z) {
+void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z, int updateCount) {
   //inflate the traversal map using openCV
   cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
-  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(1.5*botRadius, 1.5*botRadius));
+  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
   cv::dilate(mapImage, dilatedMap, element);
 
   //reset soft obstacle position
@@ -338,6 +381,7 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
   float radianAngle = (float) botQt.getAngle();
 
   //depending upon bumperId, get perimeter points (in world frame) where we need to increase the cost
+  ROS_INFO("BumperEvent from Bumper: %d", bumperId);
   switch (bumperId) {
     case -1:
       //no collision, hence no need to do anything
@@ -355,8 +399,8 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
       wy = (float) (y + botRadius * sin(radianAngle-0.78));
       break;
   }
-//  wx = (float) (x + botRadius * cos(radianAngle));
-//  wy = (float) (y + botRadius * sin(radianAngle));
+//  wx = (float) (x - botRadius * cos(radianAngle));
+//  wy = (float) (y - botRadius * sin(radianAngle));
 
   //convert to mapCells, only if there was a collision
   unsigned int mx, my;
@@ -380,12 +424,16 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
     }
   }
 
+  ROS_INFO("Updated map...resetting and storing state");
+
   //reset the traversalMap to all zeros
   std::fill_n(traversalMap, mapHeight_*mapWidth_, 0.0);
 
   //dumping the dynamic map into a CSV, to be visualized by matlab
   std::ofstream ofs;
-  ofs.open("/home/priyamp/Documents/Codebase/MapData/DynamicMap1.csv", std::ofstream::out);
+  std::stringstream ss;
+  ss << "/home/priyamp/Documents/Codebase/MapData/DynamicMapStages/DynamicMap" << updateCount << ".csv";
+  ofs.open(ss.str().c_str(), std::ofstream::out);
 
   for (int x = 0; x < mapWidth_; ++x) {
     for (int y = 0; y < mapHeight_; ++y) {
@@ -393,7 +441,7 @@ void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, f
       if (y < mapHeight_ - 1) {
         ofs << ",";
       }
-    }
+    };
     ofs << std::endl;
   }
 
