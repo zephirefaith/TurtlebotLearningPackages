@@ -62,8 +62,11 @@ int main(int argc, char **argv) {
   ROS_INFO("LRTA* is running now...");
   ros::NodeHandle nh;
 
-  //publisher topic for RMS calls
-  ros::Publisher stuckPub = nh.advertise<std_msgs::String>("robot_stuck", 10);
+  //publishers
+  ros::Publisher stuckPub = nh.advertise<std_msgs::String>("learning_astar/robot_stuck", 10);
+  ros::Publisher obstacle = nh.advertise<geometry_msgs::PoseStamped>("learning_astar/obstacle_position", 10);
+  ros::Publisher robotPos = nh.advertise<geometry_msgs::PoseStamped>("learning_astar/robot_stuck_pose", 10);
+  ros::Publisher velPub = nh.advertise<geometry_msgs::Twist>("cmd_vel_mux/input/teleop", 100);
 
   //subscriber for RMS feedback
   ros::Subscriber rmsSub = nh.subscribe("user_feedback", 10, &rmsDoneCb);
@@ -96,6 +99,28 @@ int main(int argc, char **argv) {
   //learning_astar object initialization
   learning_astar astar(response);
   ROS_INFO("LRTA* object created successfully");
+
+  ///////////
+  //TESTING//
+  ///////////
+
+  geometry_msgs::PoseStamped testPose, outputPose;
+  tf::TransformListener tfLinkToMap;
+  unsigned int mx, my;
+  testPose.header.frame_id = "base_link";
+  testPose.pose.orientation.z = 1.00;
+  ROS_INFO("Waiting for tf");
+  while(tfLinkToMap.waitForTransform("map","base_link", ros::Time::now(), ros::Duration(5.0))){}
+  tfLinkToMap.transformPose("map", testPose, outputPose);
+  astar.worldToMap((float) outputPose.pose.position.x, (float) outputPose.pose.position.y, &mx, &my);
+
+  ROS_INFO("Input Position: %f, %f in base_link", testPose.pose.position.x, testPose.pose.position.y);
+  ROS_INFO("Output Position: %f, %f in map, which refers to cell %d, %d", outputPose.pose.position.x, outputPose.pose.position.y, mx, my);
+
+
+  //////////
+
+
 
   //get initial position on rviz
   ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updatePosition, &astar);
@@ -179,6 +204,8 @@ int main(int argc, char **argv) {
 
     ROS_INFO("Client connected");
 
+    ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, &learning_astar::updatePosition, &astar);
+
     //send sparse waypoints to Turtlebot move_base
     while (!sparseWaypoints.empty()) {
 
@@ -219,12 +246,6 @@ int main(int argc, char **argv) {
         if (stuck) {
 
           ROS_INFO("Engage SOS behaviour...");
-
-          //cancel pursuing of goal
-          ROS_INFO("Cancelling goal pursuit and waiting");
-          ac.cancelAllGoals();
-          ros::Duration(3.0).sleep();
-
           //store current position, to be used for updating the map
           float stuckX, stuckY, stuckW, stuckZ;
           stuckX = (float) astar.currentPose_.pose.pose.position.x;
@@ -232,17 +253,28 @@ int main(int argc, char **argv) {
           stuckW = (float) astar.currentPose_.pose.pose.orientation.w;
           stuckZ = (float) astar.currentPose_.pose.pose.orientation.z;
 
-          //backup the robot for 0.5 m
+          //cancel pursuing of goal
+          ROS_INFO("Cancelling goal pursuit and waiting");
+          ac.cancelAllGoals();
+          ros::Duration(0.5).sleep();
+
+          //backup the robot
           ROS_INFO("Backing up AssFace");
-          ros::Publisher velPub = nh.advertise<geometry_msgs::Twist>("cmd_vel_mux/input/teleop", 10);
           geometry_msgs::Twist velocity;
-          velocity.linear.x = -1.0;
+          velocity.linear.x = -0.5;
           velocity.angular.z = 0.0;
-          velPub.publish(velocity);
-          ros::Duration(1.5).sleep();
+          count = 0;
+          while(count++<6){
+            velPub.publish(velocity);
+            ros::Duration(0.1).sleep();
+          }
           velocity.linear.x = 0.0;
           velocity.linear.y = 0.0;
-          velPub.publish(velocity);
+          count = 0;
+          while(count++<2) {
+            velPub.publish(velocity);
+            ros::Duration(0.1).sleep();
+          }
 
           //publish to robot_stuck topic for RMS to take over
           std_msgs::String sosMsg;
@@ -256,7 +288,6 @@ int main(int argc, char **argv) {
 
           //wait for RMS to handover control
           ROS_INFO("Waiting for user to finish helping the bot...");
-          ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, &learning_astar::updatePosition, &astar);
           while (userActive) {
             ros::spinOnce();
           }
@@ -264,14 +295,21 @@ int main(int argc, char **argv) {
 
           //update DynamicMap
           ROS_INFO("Gathering relevant info from this interaction...");
-          astar.updateDynamicMap(bumperId, stuckX, stuckY, stuckW, stuckZ, updateCount++);
+          std::vector<float> obstaclePos;
+          obstaclePos = astar.updateDynamicMap(bumperId, stuckX, stuckY, stuckW, stuckZ, updateCount++);
           bumperId = -1;
 
-          //reinitialize the initialPosition for plan making purposes, subscribe to amcl_pose
-//          astar.initialPosition_.header.frame_id = std::string();
-//          while(astar.initialPosition_.header.frame_id.size()==0){
-//            ros::spinOnce();
-//          }
+          //publish obstacle position and robot's "stuck" position with the robot's captured orientation
+          geometry_msgs::PoseStamped genericPose;
+          genericPose.header.frame_id = "map";
+          genericPose.pose.position.y = obstaclePos[1];
+          genericPose.pose.position.x = obstaclePos[0];
+          genericPose.pose.orientation.w = stuckW;
+          genericPose.pose.orientation.z = stuckZ;
+          obstacle.publish(genericPose);
+          genericPose.pose.position.y = stuckY;
+          genericPose.pose.position.x = stuckX;
+          robotPos.publish(genericPose);
 
           //send back to top to get goal pose from RViz for recomputation of an A* plan
           backToTop = true;

@@ -36,10 +36,10 @@ learning_astar::learning_astar() {
 learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   softObstacleX = -1;
   softObstacleY = -1;
-  sigma = 0.8;
+  sigma = 1.5;
   botRadius = 0.2;
-  incrementConstant = 300;
-  decayConstant = 0.6;
+  incrementConstant = 2000;
+  decayConstant = 0.65;
   worldMap_ = mapgrid;
   mapResolution_ = worldMap_.info.resolution;
   mapOrigin_ = worldMap_.info.origin;
@@ -73,7 +73,7 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
     }
   }
 
-  //  //dumping the map into a CSV, to be visualized by matlab
+  //dumping the map into a CSV, to be visualized by matlab
   std::ofstream ofs;
   ofs.open("/home/priyamp/Documents/Codebase/MapData/StaticMap.csv", std::ofstream::out);
 
@@ -88,6 +88,9 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   }
 
   ofs.close();
+
+  ROS_INFO("Listening for tf from map to base_link");
+  while(tfListener.waitForTransform("map","base_link", ros::Time::now(), ros::Duration(5.0))){}
 
   //TODO deal with later
 //  //inflate temp
@@ -226,6 +229,88 @@ float learning_astar::gaussian2d(int x, int y) {
   return gauss_value;
 }
 
+//for updating Dynamic Map based on bumper sensors
+std::vector<float> learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z, int updateCount) {
+//  //inflate the traversal map using openCV
+//  cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
+//  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+//  cv::dilate(mapImage, dilatedMap, element);
+
+  //reset soft obstacle position
+  softObstacleX = -1;
+  softObstacleY = -1;
+
+  //variables for storing the position where cost is to be increased
+  geometry_msgs::PoseStamped predictedObstaclePose, transformedPose;
+  predictedObstaclePose.header.frame_id = "base_link";
+  predictedObstaclePose.pose.orientation.z = 1.00;
+
+  switch (bumperId){
+    case -1:
+      break;
+    case 0:
+      predictedObstaclePose.pose.position.y = -0.25;
+      break;
+    case 1:
+      predictedObstaclePose.pose.position.x = 0.25;
+      break;
+    case 2:
+      predictedObstaclePose.pose.position.y = 0.25;
+      break;
+  }
+
+  //convert to mapCells, only if there was a collision
+  unsigned int mx, my;
+  if (bumperId >= 0) {
+    tfListener.transformPose("map",predictedObstaclePose, transformedPose);
+    worldToMap((float) transformedPose.pose.position.x, (float) transformedPose.pose.position.y, &mx, &my);
+    softObstacleX = mx;
+    softObstacleY = my;
+  }
+
+  std::vector<float> posVector;
+  posVector.push_back((const float &) transformedPose.pose.position.x);
+  posVector.push_back((const float &) transformedPose.pose.position.y);
+
+  //change the dynamic Map, do anyways, because the map should decay to all zeros, even not bumping into anything is
+  // an experience...also clear out the places the robot believes it has traversed
+  for (int i = 0; i < mapWidth_; ++i) {
+    for (int j = 0; j < mapHeight_; ++j) {
+//      if (dilatedMap.at<float>(i,j)==0.0) {
+        dynamicWorldMap[j * mapWidth_ + i] =
+            decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
+//      } else {
+//        dynamicWorldMap[j*mapHeight_+i] = 0;
+//      }
+    }
+  }
+
+  ROS_INFO("Updated map...resetting and storing state");
+
+//  //reset the traversalMap to all zeros
+//  std::fill_n(traversalMap, mapHeight_*mapWidth_, 0.0);
+
+  //dumping the dynamic map into a CSV, to be visualized by matlab
+  std::ofstream ofs;
+  std::stringstream ss;
+  ss << "/home/priyamp/Documents/Codebase/MapData/DynamicMapStages/DynamicMap" << updateCount << ".csv";
+  ofs.open(ss.str().c_str(), std::ofstream::out);
+
+  for (int x = 0; x < mapWidth_; ++x) {
+    for (int y = 0; y < mapHeight_; ++y) {
+      ofs << dynamicWorldMap[y * mapWidth_ + x];
+      if (y < mapHeight_ - 1) {
+        ofs << ",";
+      }
+    };
+    ofs << std::endl;
+  }
+
+  ofs.close();
+
+  return posVector;
+}
+
 //for making a plan using A*
 std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
@@ -356,96 +441,4 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
   }
 
   return wayPoints;
-}
-
-//for updating Dynamic Map based on bumper sensors
-void learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z, int updateCount) {
-  //inflate the traversal map using openCV
-  cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
-  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-  cv::dilate(mapImage, dilatedMap, element);
-
-  //reset soft obstacle position
-  softObstacleX = -1;
-  softObstacleY = -1;
-
-  //variables for storing the position where cost is to be increased
-  float wx = 0.0, wy = 0.0;
-
-  //create Quaternion
-  tf::Quaternion botQt;
-  botQt.setW(w);
-  botQt.setZ(z);
-
-  //get angle
-  float radianAngle = (float) botQt.getAngle();
-
-  //depending upon bumperId, get perimeter points (in world frame) where we need to increase the cost
-  ROS_INFO("BumperEvent from Bumper: %d", bumperId);
-  switch (bumperId) {
-    case -1:
-      //no collision, hence no need to do anything
-      break;
-    case 0:
-      wx = (float) (x + botRadius * cos(radianAngle+0.78));
-      wy = (float) (y + botRadius * sin(radianAngle+0.78));
-      break;
-    case 1:
-      wx = (float) (x + botRadius * cos(radianAngle));
-      wy = (float) (y + botRadius * sin(radianAngle));
-      break;
-    case 2:
-      wx = (float) (x + botRadius * cos(radianAngle-0.78));
-      wy = (float) (y + botRadius * sin(radianAngle-0.78));
-      break;
-  }
-//  wx = (float) (x - botRadius * cos(radianAngle));
-//  wy = (float) (y - botRadius * sin(radianAngle));
-
-  //convert to mapCells, only if there was a collision
-  unsigned int mx, my;
-  if (bumperId >= 0) {
-    worldToMap(wx, wy, &mx, &my);
-    softObstacleX = mx;
-    softObstacleY = my;
-    worldToMap(x,y,&mx,&my);
-  }
-
-  //change the dynamic Map, do anyways, because the map should decay to all zeros, even not bumping into anything is
-  // an experience...also clear out the places the robot believes it has traversed
-  for (int i = 0; i < mapWidth_; ++i) {
-    for (int j = 0; j < mapHeight_; ++j) {
-      if (dilatedMap.at<float>(i,j)==0.0) {
-        dynamicWorldMap[j * mapWidth_ + i] =
-            decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
-      } else {
-        dynamicWorldMap[j*mapHeight_+i] = 0;
-      }
-    }
-  }
-
-  ROS_INFO("Updated map...resetting and storing state");
-
-  //reset the traversalMap to all zeros
-  std::fill_n(traversalMap, mapHeight_*mapWidth_, 0.0);
-
-  //dumping the dynamic map into a CSV, to be visualized by matlab
-  std::ofstream ofs;
-  std::stringstream ss;
-  ss << "/home/priyamp/Documents/Codebase/MapData/DynamicMapStages/DynamicMap" << updateCount << ".csv";
-  ofs.open(ss.str().c_str(), std::ofstream::out);
-
-  for (int x = 0; x < mapWidth_; ++x) {
-    for (int y = 0; y < mapHeight_; ++y) {
-      ofs << dynamicWorldMap[y * mapWidth_ + x];
-      if (y < mapHeight_ - 1) {
-        ofs << ",";
-      }
-    };
-    ofs << std::endl;
-  }
-
-  ofs.close();
-
-  return;
 }
