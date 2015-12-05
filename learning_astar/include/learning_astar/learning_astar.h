@@ -36,7 +36,7 @@ public:
     int incrementConstant;
     geometry_msgs::Pose mapOrigin_;
     nav_msgs::OccupancyGrid worldMap_;
-    geometry_msgs::PoseWithCovarianceStamped initialPosition_;
+    geometry_msgs::PoseWithCovarianceStamped currentPose_;
     geometry_msgs::PoseStamped goalPosition_;
 
     //all function members
@@ -59,7 +59,7 @@ public:
     void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] to mapCells [mx,my]
     void mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy); //converts mapCells [mx,my] to [wx,wy]
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr &); //callBack for move_base_simple_goal
-    void updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &); //callback for initialpose
+    void updatePosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &); //callback for initialpose
     void updateDynamicMap(int, float, float, float, float, int);
 
     float gaussian2d(int, int);

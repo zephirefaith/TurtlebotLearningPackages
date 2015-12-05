@@ -136,12 +136,12 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
 }
 
 //for updating initial position of the robot
-void learning_astar::updateInitialPosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg) {
-  initialPosition_ = *msg;
+void learning_astar::updatePosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &msg) {
+  currentPose_ = *msg;
 
   if(userActive){
     unsigned int mx,my;
-    worldToMap(initialPosition_.pose.pose.position.x, initialPosition_.pose.pose.position.y, &mx, &my);
+    worldToMap((float) currentPose_.pose.pose.position.x, (float) currentPose_.pose.pose.position.y, &mx, &my);
     traversalMap[my*mapWidth_+mx] = 50;
   }
 
@@ -235,7 +235,7 @@ std::vector<geometry_msgs::Pose> learning_astar::makePlan() {
 
   //get initial location
   unsigned int mx, my;
-  worldToMap((float) initialPosition_.pose.pose.position.x, (float) initialPosition_.pose.pose.position.y, &mx, &my);
+  worldToMap((float) currentPose_.pose.pose.position.x, (float) currentPose_.pose.pose.position.y, &mx, &my);
   ROS_INFO("Start on map: (%d, %d)", mx, my);
 
   //get goal location
