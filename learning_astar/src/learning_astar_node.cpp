@@ -100,28 +100,6 @@ int main(int argc, char **argv) {
   learning_astar astar(response);
   ROS_INFO("LRTA* object created successfully");
 
-  ///////////
-  //TESTING//
-  ///////////
-
-  geometry_msgs::PoseStamped testPose, outputPose;
-  tf::TransformListener tfLinkToMap;
-  unsigned int mx, my;
-  testPose.header.frame_id = "base_link";
-  testPose.pose.orientation.z = 1.00;
-  ROS_INFO("Waiting for tf");
-  while(tfLinkToMap.waitForTransform("map","base_link", ros::Time::now(), ros::Duration(5.0))){}
-  tfLinkToMap.transformPose("map", testPose, outputPose);
-  astar.worldToMap((float) outputPose.pose.position.x, (float) outputPose.pose.position.y, &mx, &my);
-
-  ROS_INFO("Input Position: %f, %f in base_link", testPose.pose.position.x, testPose.pose.position.y);
-  ROS_INFO("Output Position: %f, %f in map, which refers to cell %d, %d", outputPose.pose.position.x, outputPose.pose.position.y, mx, my);
-
-
-  //////////
-
-
-
   //get initial position on rviz
   ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updatePosition, &astar);
   ROS_INFO("Waiting for the initial pose from RViz");
@@ -257,6 +235,7 @@ int main(int argc, char **argv) {
           ROS_INFO("Cancelling goal pursuit and waiting");
           ac.cancelAllGoals();
           ros::Duration(0.5).sleep();
+          astar.getObstaclePosition(bumperId);
 
           //backup the robot
           ROS_INFO("Backing up AssFace");
@@ -264,14 +243,14 @@ int main(int argc, char **argv) {
           velocity.linear.x = -0.5;
           velocity.angular.z = 0.0;
           count = 0;
-          while(count++<6){
+          while(count++<8){
             velPub.publish(velocity);
             ros::Duration(0.1).sleep();
           }
           velocity.linear.x = 0.0;
           velocity.linear.y = 0.0;
           count = 0;
-          while(count++<2) {
+          while(count++<3) {
             velPub.publish(velocity);
             ros::Duration(0.1).sleep();
           }
@@ -296,7 +275,7 @@ int main(int argc, char **argv) {
           //update DynamicMap
           ROS_INFO("Gathering relevant info from this interaction...");
           std::vector<float> obstaclePos;
-          obstaclePos = astar.updateDynamicMap(bumperId, stuckX, stuckY, stuckW, stuckZ, updateCount++);
+          obstaclePos = astar.updateDynamicMap(bumperId, updateCount++);
           bumperId = -1;
 
           //publish obstacle position and robot's "stuck" position with the robot's captured orientation
@@ -332,7 +311,7 @@ int main(int argc, char **argv) {
 
       //update DynamicMap
       ROS_INFO("Updating map post-run");
-      astar.updateDynamicMap(bumperId, currPosX, currPosY, currOrW, currOrZ, updateCount++);
+      astar.updateDynamicMap(bumperId, updateCount++);
       bumperId = -1;
 
       //reset goal frame_id to get a new one again

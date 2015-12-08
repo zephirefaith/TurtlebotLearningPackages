@@ -36,7 +36,7 @@ learning_astar::learning_astar() {
 learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   softObstacleX = -1;
   softObstacleY = -1;
-  sigma = 1.5;
+  sigma = 0.8;
   botRadius = 0.2;
   incrementConstant = 2000;
   decayConstant = 0.65;
@@ -229,13 +229,8 @@ float learning_astar::gaussian2d(int x, int y) {
   return gauss_value;
 }
 
-//for updating Dynamic Map based on bumper sensors
-std::vector<float> learning_astar::updateDynamicMap(int bumperId, float x, float y, float w, float z, int updateCount) {
-//  //inflate the traversal map using openCV
-//  cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
-//  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
-//  cv::dilate(mapImage, dilatedMap, element);
-
+//to store obstacle position
+void learning_astar::getObstaclePosition(int bumperId){
   //reset soft obstacle position
   softObstacleX = -1;
   softObstacleY = -1;
@@ -249,13 +244,15 @@ std::vector<float> learning_astar::updateDynamicMap(int bumperId, float x, float
     case -1:
       break;
     case 0:
-      predictedObstaclePose.pose.position.y = -0.25;
+      predictedObstaclePose.pose.position.x = 0.85*botRadius;
+      predictedObstaclePose.pose.position.y = 0.5*botRadius;
       break;
     case 1:
-      predictedObstaclePose.pose.position.x = 0.25;
+      predictedObstaclePose.pose.position.x = 1.25*botRadius;
       break;
     case 2:
-      predictedObstaclePose.pose.position.y = 0.25;
+      predictedObstaclePose.pose.position.x = 0.85*botRadius;
+      predictedObstaclePose.pose.position.y = -0.5*botRadius;
       break;
   }
 
@@ -268,9 +265,22 @@ std::vector<float> learning_astar::updateDynamicMap(int bumperId, float x, float
     softObstacleY = my;
   }
 
+  return;
+}
+
+//for updating Dynamic Map based on bumper sensors
+std::vector<float> learning_astar::updateDynamicMap(int bumperId, int updateCount) {
+  //inflate the traversal map using openCV
+//  cv::Mat mapImage(mapHeight_,mapWidth_, CV_32FC1, traversalMap), dilatedMap(mapHeight_,mapWidth_, CV_32FC1);
+//  cv::Mat element = cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(3, 3));
+//  cv::dilate(mapImage, dilatedMap, element);
+
+  float wx, wy;
+  mapToWorld(softObstacleX, softObstacleY, &wx, &wy);
+
   std::vector<float> posVector;
-  posVector.push_back((const float &) transformedPose.pose.position.x);
-  posVector.push_back((const float &) transformedPose.pose.position.y);
+  posVector.push_back(wx);
+  posVector.push_back(wy);
 
   //change the dynamic Map, do anyways, because the map should decay to all zeros, even not bumping into anything is
   // an experience...also clear out the places the robot believes it has traversed
@@ -287,7 +297,7 @@ std::vector<float> learning_astar::updateDynamicMap(int bumperId, float x, float
 
   ROS_INFO("Updated map...resetting and storing state");
 
-//  //reset the traversalMap to all zeros
+  //reset the traversalMap to all zeros
 //  std::fill_n(traversalMap, mapHeight_*mapWidth_, 0.0);
 
   //dumping the dynamic map into a CSV, to be visualized by matlab

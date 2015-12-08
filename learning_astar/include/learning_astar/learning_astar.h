@@ -43,27 +43,19 @@ public:
 
     //all function members
     learning_astar();
-
     learning_astar(const nav_msgs::OccupancyGrid);
-
     bool isFree(mapCell);
-
     int toIndex(mapCell);
-
     float h(mapCell, mapCell);
-
     float cost(mapCell, mapCell);
-
     geometry_msgs::Pose getPose(mapCell);
-
     std::vector<geometry_msgs::Pose> makePlan();
-
+    void getObstaclePosition(int);
     void worldToMap(float wx, float wy, unsigned int *mx, unsigned int *my); //converts [wx,wy] to mapCells [mx,my]
     void mapToWorld(unsigned int mx, unsigned int my, float *wx, float *wy); //converts mapCells [mx,my] to [wx,wy]
     void updateGoalPosition(const geometry_msgs::PoseStampedConstPtr &); //callBack for move_base_simple_goal
     void updatePosition(const geometry_msgs::PoseWithCovarianceStampedConstPtr &); //callback for initialpose
-    std::vector<float> updateDynamicMap(int, float, float, float, float, int);
-
+    std::vector<float> updateDynamicMap(int, int);
     float gaussian2d(int, int);
 };
 
