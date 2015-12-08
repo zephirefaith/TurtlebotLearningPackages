@@ -30,7 +30,6 @@ bool userActive = false;
 int bumperId = -1;
 
 //callbacks
-
 void rmsDoneCb(const std_msgs::StringConstPtr &msg) {
   userActive = false;
 
@@ -47,9 +46,6 @@ void bumperCb(const kobuki_msgs::BumperEventConstPtr &msg) {
   return;
 }
 
-
-//main
-
 int main(int argc, char **argv) {
 
   ////////////
@@ -63,15 +59,15 @@ int main(int argc, char **argv) {
   ros::NodeHandle nh;
 
   //publishers
-  ros::Publisher stuckPub = nh.advertise<std_msgs::String>("learning_astar/robot_stuck", 10);
-  ros::Publisher obstacle = nh.advertise<geometry_msgs::PoseStamped>("learning_astar/obstacle_position", 10);
-  ros::Publisher robotPos = nh.advertise<geometry_msgs::PoseStamped>("learning_astar/robot_stuck_pose", 10);
+  ros::Publisher stuckPub = nh.advertise<std_msgs::String>("learning_astar/robot_active", 10);
+//  ros::Publisher obstacle = nh.advertise<geometry_msgs::PoseStamped>("learning_astar/obstacle_position", 10);
+//  ros::Publisher robotPos = nh.advertise<geometry_msgs::PoseStamped>("learning_astar/robot_stuck_pose", 10);
   ros::Publisher velPub = nh.advertise<geometry_msgs::Twist>("cmd_vel_mux/input/teleop", 100);
+  ros::Publisher feedbackPub = nh.advertise<std_msgs::String>("learning_astar/feedback", 10);
 
-  //subscriber for RMS feedback
-  ros::Subscriber rmsSub = nh.subscribe("user_feedback", 10, &rmsDoneCb);
-  //subscriber for bumper event
-  ros::Subscriber bumperSub = nh.subscribe("/mobile_base/events/bumper", 50, bumperCb);
+  //subscribers
+  ros::Subscriber rmsSub = nh.subscribe("user_feedback", 10, rmsDoneCb);
+  ros::Subscriber bumperSub = nh.subscribe("mobile_base/events/bumper", 50, bumperCb);
 
   //client for map_server static_map service
   nav_msgs::GetMap mapRequest;
@@ -80,9 +76,12 @@ int main(int argc, char **argv) {
 
   //flags
   bool backToTop = false;
+  bool planAbort = false;
 
-  //temp variables
+  //variables
   int updateCount = 0;
+  std_msgs::String sosMsg;
+  std::stringstream ss;
 
 
   ////////////////////////////////////////
@@ -102,8 +101,16 @@ int main(int argc, char **argv) {
 
   //get initial position on rviz
   ros::Subscriber initialSub = nh.subscribe("initialpose", 10, &learning_astar::updatePosition, &astar);
+
+  //feedback
   ROS_INFO("Waiting for the initial pose from RViz");
-  while (astar.currentPose_.header.frame_id.size() == 0) {
+  ss.str("");
+  ss << "Waiting for the initial pose from RViz";
+  sosMsg.data = ss.str();
+  feedbackPub.publish(sosMsg);
+
+
+  while (astar.currentPose_.header.frame_id.size() == 0 && ros::ok()) {
     ros::spinOnce();
   }
 
@@ -114,9 +121,16 @@ int main(int argc, char **argv) {
     stuck = false;
 
     //get the goal on rviz
-    if (astar.goalPosition_.header.frame_id.size() == 0) {
+    if (astar.goalPosition_.header.frame_id.size() == 0  && ros::ok()) {
       ros::Subscriber goalSub = nh.subscribe("move_base_simple/goal", 10, &learning_astar::updateGoalPosition, &astar);
+
+      //feedback
       ROS_INFO("Waiting for the goal from RViz");
+      ss.str("");
+      ss << "Waiting for the goal from RViz";
+      sosMsg.data = ss.str();
+      feedbackPub.publish(sosMsg);
+
       while (astar.goalPosition_.header.frame_id.size() == 0) {
         ros::spinOnce();
       }
@@ -132,6 +146,13 @@ int main(int argc, char **argv) {
     //get a list of waypoints as the plan for turtlebot
     std::vector <geometry_msgs::Pose> wayPoints, sparseWaypoints;
     sparseWaypoints.clear();
+
+    //feedback
+    ss.str("");
+    ss << "We are building a plan from Start to Goal";
+    sosMsg.data = ss.str();
+    feedbackPub.publish(sosMsg);
+
     wayPoints = astar.makePlan();
 
     //to pass every nth waypoint to move_base so that it has a substantial way to go to
@@ -146,7 +167,7 @@ int main(int argc, char **argv) {
     sparseWaypoints.push_back(temp);
 
     //get sparse waypoints from dense waypoints
-    while (!wayPoints.empty()) {
+    while (!wayPoints.empty() && ros::ok()) {
       if (count == skipCount) {
         temp = wayPoints.back();
         ROS_INFO("%f, %f", temp.position.x, temp.position.y);
@@ -173,19 +194,31 @@ int main(int argc, char **argv) {
     //tell the action client that we want to spin a thread by default
     MoveBaseClient ac("move_base", true);
 
+    //feedback
+    ss.str("");
+    ss << "We have a plan! Waiting for robot execution...";
+    sosMsg.data = ss.str();
+    feedbackPub.publish(sosMsg);
+
     //wait for the action server to come up
     ROS_INFO("Waiting for the move_base action server to come up");
-    while (!ac.waitForServer(ros::Duration(5.0))) {
+    while (!ac.waitForServer(ros::Duration(5.0)) && ros::ok()) {
       ROS_INFO("...");
       ros::spinOnce();
     }
 
     ROS_INFO("Client connected");
 
+    //feedback
+    ss.str("");
+    ss << "And we're moving";
+    sosMsg.data = ss.str();
+    feedbackPub.publish(sosMsg);
+
     ros::Subscriber amclSub = nh.subscribe("amcl_pose", 10, &learning_astar::updatePosition, &astar);
 
     //send sparse waypoints to Turtlebot move_base
-    while (!sparseWaypoints.empty()) {
+    while (!sparseWaypoints.empty() && ros::ok()) {
 
       geometry_msgs::Pose currentGoal = sparseWaypoints.back();
       sparseWaypoints.pop_back();
@@ -209,7 +242,14 @@ int main(int argc, char **argv) {
       //track goal progress
       bool atWaypoint = false;
 
-      while (!atWaypoint) {
+      while (!atWaypoint  && ros::ok()) {
+
+        actionlib::SimpleClientGoalState state = ac.getState();
+        if(ac.getState() == actionlib::SimpleClientGoalState::ABORTED || ac.getState() ==
+                                                                             actionlib::SimpleClientGoalState::REJECTED || ac.getState() == actionlib::SimpleClientGoalState::LOST){
+          planAbort = true;
+        }
+
         float distance = (float) sqrt((astar.currentPose_.pose.pose.position.x - currentGoal.position.x) *
                                       (astar.currentPose_.pose.pose.position.x - currentGoal.position.x) +
                                       (astar.currentPose_.pose.pose.position.y - currentGoal.position.y) *
@@ -219,9 +259,54 @@ int main(int argc, char **argv) {
           atWaypoint = true;
         }
 
-        //case 2: robot gets stuck: cancel goal pursuit -> call RMS -> wait for RMS to exit -> update costs -> get
+        //case 2: planner aborted due to some problem
+        if(planAbort){
+          //cancel pursuing of goal
+          ROS_INFO("Cancelling goal pursuit and waiting");
+          ac.cancelAllGoals();
+          ros::Duration(0.5).sleep();
+
+          //feedback
+          ss.str("");
+          ss << "Planner could not find a path for the robot. Please steer it to a more open space so that it's "
+                    "easier to replan.";
+          sosMsg.data = ss.str();
+          feedbackPub.publish(sosMsg);
+
+          //ask for help from rms
+          //publish to robot_active topic for RMS to take over
+          ss.str("");
+          ss << "STANDBY";
+          sosMsg.data = ss.str();
+          ROS_INFO("Calling out to RMS");
+          for (int i = 0; i < 5; ++i) {
+            stuckPub.publish(sosMsg);
+          }
+          userActive = true;
+          astar.userActive = true;
+
+          //get control back from rms
+          //wait for RMS to handover control
+          ROS_INFO("Waiting for user to finish helping the bot...");
+          while (userActive) {
+            ros::spinOnce();
+          }
+          astar.userActive = false;
+
+          //send control to replan
+          backToTop = true;
+        }
+
+        //case 3: robot gets stuck: cancel goal pursuit -> call RMS -> wait for RMS to exit -> update costs -> get
         // new plan
         if (stuck) {
+
+          //feedback
+          ss.str("");
+          ss << "The bot has hit an obstacle. Please help the bot get around the obstacle. Directions are on left of "
+                    "the screen.";
+          sosMsg.data = ss.str();
+          feedbackPub.publish(sosMsg);
 
           ROS_INFO("Engage SOS behaviour...");
           //store current position, to be used for updating the map
@@ -255,13 +340,14 @@ int main(int argc, char **argv) {
             ros::Duration(0.1).sleep();
           }
 
-          //publish to robot_stuck topic for RMS to take over
-          std_msgs::String sosMsg;
-          std::stringstream ss;
-          ss << "STUCK";
+          //publish to robot_active topic for RMS to take over
+          ss.str("");
+          ss << "STANDBY";
           sosMsg.data = ss.str();
           ROS_INFO("Calling out to RMS");
-          stuckPub.publish(sosMsg);
+          for (int i = 0; i < 5; ++i) {
+            stuckPub.publish(sosMsg);
+          }
           userActive = true;
           astar.userActive = true;
 
@@ -272,23 +358,31 @@ int main(int argc, char **argv) {
           }
           astar.userActive = false;
 
+          //publish to robot_active that robot is driving autonomously now
+          ss.str("");
+          ss << "ACTIVE";
+          sosMsg.data = ss.str();
+          for (int i = 0; i < 5; ++i) {
+            stuckPub.publish(sosMsg);
+          }
+
           //update DynamicMap
           ROS_INFO("Gathering relevant info from this interaction...");
           std::vector<float> obstaclePos;
           obstaclePos = astar.updateDynamicMap(bumperId, updateCount++);
           bumperId = -1;
 
-          //publish obstacle position and robot's "stuck" position with the robot's captured orientation
-          geometry_msgs::PoseStamped genericPose;
-          genericPose.header.frame_id = "map";
-          genericPose.pose.position.y = obstaclePos[1];
-          genericPose.pose.position.x = obstaclePos[0];
-          genericPose.pose.orientation.w = stuckW;
-          genericPose.pose.orientation.z = stuckZ;
-          obstacle.publish(genericPose);
-          genericPose.pose.position.y = stuckY;
-          genericPose.pose.position.x = stuckX;
-          robotPos.publish(genericPose);
+//          //publish obstacle position and robot's "stuck" position with the robot's captured orientation
+//          geometry_msgs::PoseStamped genericPose;
+//          genericPose.header.frame_id = "map";
+//          genericPose.pose.position.y = obstaclePos[1];
+//          genericPose.pose.position.x = obstaclePos[0];
+//          genericPose.pose.orientation.w = stuckW;
+//          genericPose.pose.orientation.z = stuckZ;
+////          obstacle.publish(genericPose);
+//          genericPose.pose.position.y = stuckY;
+//          genericPose.pose.position.x = stuckX;
+////          robotPos.publish(genericPose);
 
           //send back to top to get goal pose from RViz for recomputation of an A* plan
           backToTop = true;

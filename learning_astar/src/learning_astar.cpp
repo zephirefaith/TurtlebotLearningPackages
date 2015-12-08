@@ -38,8 +38,8 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   softObstacleY = -1;
   sigma = 0.8;
   botRadius = 0.2;
-  incrementConstant = 2000;
-  decayConstant = 0.65;
+  incrementConstant = 500;
+  decayConstant = 0.8;
   worldMap_ = mapgrid;
   mapResolution_ = worldMap_.info.resolution;
   mapOrigin_ = worldMap_.info.origin;
@@ -286,12 +286,12 @@ std::vector<float> learning_astar::updateDynamicMap(int bumperId, int updateCoun
   // an experience...also clear out the places the robot believes it has traversed
   for (int i = 0; i < mapWidth_; ++i) {
     for (int j = 0; j < mapHeight_; ++j) {
-//      if (dilatedMap.at<float>(i,j)==0.0) {
+      if (bumperId>=0) {
         dynamicWorldMap[j * mapWidth_ + i] =
-            decayConstant * gaussian2d(i, j) + (1 - decayConstant) * dynamicWorldMap[j * mapWidth_ + i];
-//      } else {
-//        dynamicWorldMap[j*mapHeight_+i] = 0;
-//      }
+            gaussian2d(i, j) +  decayConstant * dynamicWorldMap[j * mapWidth_ + i];
+      } else {
+        dynamicWorldMap[j*mapWidth_+i] = decayConstant*dynamicWorldMap[j*mapWidth_+i];
+      }
     }
   }
 

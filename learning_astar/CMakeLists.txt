@@ -138,6 +138,7 @@ include_directories(include
 
 ## Declare a C++ executable
 add_executable(learning_astar_node src/learning_astar_node.cpp src/learning_astar.cpp)
+add_executable(learning_astar_safety_node src/learning_astar_safety_node.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -148,6 +149,9 @@ target_link_libraries(learning_astar_node
    ${catkin_LIBRARIES}
    ${OpenCV_LIBRARIES}
  )
+target_link_libraries(learning_astar_safety_node
+        ${catkin_LIBRARIES}
+        )
 
 #############
 ## Install ##
