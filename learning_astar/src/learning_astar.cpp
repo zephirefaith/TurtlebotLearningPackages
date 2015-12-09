@@ -89,6 +89,9 @@ learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
 
   ofs.close();
 
+  //cleaning dynamic map folder
+  system("exec rm -r /home/priyamp/Documents/Codebase/MapData/DynamicMapStages/*");
+
   ROS_INFO("Listening for tf from map to base_link");
   while(tfListener.waitForTransform("map","base_link", ros::Time::now(), ros::Duration(5.0))){}
 
