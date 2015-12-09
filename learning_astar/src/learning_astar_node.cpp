@@ -131,7 +131,7 @@ int main(int argc, char **argv) {
       sosMsg.data = ss.str();
       feedbackPub.publish(sosMsg);
 
-      while (astar.goalPosition_.header.frame_id.size() == 0) {
+      while (astar.goalPosition_.header.frame_id.size() == 0 && ros::ok()) {
         ros::spinOnce();
       }
     }
@@ -245,8 +245,7 @@ int main(int argc, char **argv) {
       while (!atWaypoint  && ros::ok()) {
 
         actionlib::SimpleClientGoalState state = ac.getState();
-        if(ac.getState() == actionlib::SimpleClientGoalState::ABORTED || ac.getState() ==
-                                                                             actionlib::SimpleClientGoalState::REJECTED || ac.getState() == actionlib::SimpleClientGoalState::LOST){
+        if(ac.getState() == actionlib::SimpleClientGoalState::ABORTED){
           planAbort = true;
         }
 
