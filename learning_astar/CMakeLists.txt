@@ -13,7 +13,10 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  tf
 )
+
+find_package(OpenCV REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -105,10 +108,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## CATKIN_DEPENDS: catkin_packages dependent projects also need
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
-#  INCLUDE_DIRS include
-#  LIBRARIES learning_astar
-#  CATKIN_DEPENDS actionlib actionlib_msgs geometry_msgs move_base_msgs roscpp rospy std_msgs
-#  DEPENDS system_lib
+  INCLUDE_DIRS include
+  LIBRARIES learning_astar
+  CATKIN_DEPENDS actionlib actionlib_msgs geometry_msgs move_base_msgs roscpp rospy std_msgs
 )
 
 ###########
@@ -118,14 +120,16 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 # include_directories(include)
-include_directories(
+include_directories(include
   ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+#  learning_astar
 )
 
 ## Declare a C++ library
-# add_library(learning_astar
-#   src/${PROJECT_NAME}/learning_astar.cpp
-# )
+#add_library(learning_astar
+#   src/learning_astar.cpp
+#   )
 
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -133,16 +137,21 @@ include_directories(
 # add_dependencies(learning_astar ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
-# add_executable(learning_astar_node src/learning_astar_node.cpp)
+add_executable(learning_astar_node src/learning_astar_node.cpp src/learning_astar.cpp)
+add_executable(learning_astar_safety_node src/learning_astar_safety_node.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
-# add_dependencies(learning_astar_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+#add_dependencies(learning_astar_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Specify libraries to link a library or executable target against
-# target_link_libraries(learning_astar_node
-#   ${catkin_LIBRARIES}
-# )
+target_link_libraries(learning_astar_node
+   ${catkin_LIBRARIES}
+   ${OpenCV_LIBRARIES}
+ )
+target_link_libraries(learning_astar_safety_node
+        ${catkin_LIBRARIES}
+        )
 
 #############
 ## Install ##
@@ -168,8 +177,8 @@ include_directories(
 ## Mark cpp header files for installation
 # install(DIRECTORY include/${PROJECT_NAME}/
 #   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
+#   FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+##   PATTERN ".svn" EXCLUDE
 # )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
@@ -191,6 +200,3 @@ include_directories(
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
-
-add_executable(learning_astar_node src/learning_astar_node.cpp)
-target_link_libraries(learning_astar_node ${catkin_LIBRARIES})
