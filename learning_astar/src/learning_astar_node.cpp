@@ -156,7 +156,7 @@ int main(int argc, char **argv) {
     wayPoints = astar.makePlan();
 
     //to pass every nth waypoint to move_base so that it has a substantial way to go to
-    int skipCount = 3, count = 0;
+    int skipCount = 2, count = 0;
 
     //last sparseWaypoint should be the goal itself
     geometry_msgs::Pose temp;
@@ -294,6 +294,7 @@ int main(int argc, char **argv) {
 
           //send control to replan
           backToTop = true;
+          planAbort = false;
         }
 
         //case 3: robot gets stuck: cancel goal pursuit -> call RMS -> wait for RMS to exit -> update costs -> get
@@ -401,6 +402,12 @@ int main(int argc, char **argv) {
       ROS_INFO("Successfully reached the goal");
       //cancel goals to make sure move_base isn't still trying to get somewhere it doesn't need to
       ac.cancelAllGoals();
+
+      //feedback
+      ss.str("");
+      ss << "Yay! We reached the goal!";
+      sosMsg.data = ss.str();
+      feedbackPub.publish(sosMsg);
 
       //update DynamicMap
       ROS_INFO("Updating map post-run");

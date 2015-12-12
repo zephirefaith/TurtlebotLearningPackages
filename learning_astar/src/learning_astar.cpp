@@ -36,10 +36,10 @@ learning_astar::learning_astar() {
 learning_astar::learning_astar(const nav_msgs::OccupancyGrid mapgrid) {
   softObstacleX = -1;
   softObstacleY = -1;
-  sigma = 0.8;
+  sigma = 1.4;
   botRadius = 0.2;
-  incrementConstant = 500;
-  decayConstant = 0.8;
+  incrementConstant = 100;
+  decayConstant = 0.7;
   worldMap_ = mapgrid;
   mapResolution_ = worldMap_.info.resolution;
   mapOrigin_ = worldMap_.info.origin;
